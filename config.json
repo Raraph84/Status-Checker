@@ -1,3 +1,12 @@
 {
-    "token": "tNW167xiGM2iZ7PYur6cs7nZFTFZeUHJrv8ash8jb3AVViRSS15N82W0eeRLW2LyfFkCeFF7muv6zyXy0raeCC28wqD6Vi1ZjFDS"
+    "database": {
+        "host": "localhost",
+        "user": "Status_Checker",
+        "password": "w0nLzcbQtO",
+        "database": "Status"
+    },
+    "alertBotToken": "NzU0MjU1NzE1NjAxNzQzODcz.X1yFXw.Zol4CBC7sbfOHHDZSFdVgvYljnw",
+    "alertUsers": [
+        "486801186419245060"
+    ]
 }

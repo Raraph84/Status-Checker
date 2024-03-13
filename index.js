@@ -1,105 +1,277 @@
-const { getConfig, HttpServer } = require("raraph84-lib");
-const pLimit = require("p-limit");
+const { createPool } = require("mysql");
+const { REST } = require("@discordjs/rest");
+const { getConfig, TaskManager, query } = require("raraph84-lib");
 const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
+const pLimit = require("p-limit");
 const config = getConfig(__dirname);
 
-const server = new HttpServer();
-server.on("request", async (/** @type {import("raraph84-lib/src/Request")} */ request) => {
+const tasks = new TaskManager();
 
-    if (request.url !== "/check") {
-        request.end(404, "Not found");
+const database = createPool(config.database);
+tasks.addTask((resolve, reject) => {
+    console.log("Connexion à la base de données...");
+    query(database, "SELECT 1").then(() => {
+        console.log("Connecté à la base de données !");
+        resolve();
+    }).catch((error) => {
+        console.log("Impossible de se connecter à la base de données - " + error);
+        reject();
+    });
+}, (resolve) => database.end(() => resolve()));
+
+let checkerInterval;
+tasks.addTask((resolve) => {
+    checkerInterval = setInterval(() => checkNodes(), 5 * 60 * 1000);
+    resolve();
+}, (resolve) => { clearInterval(checkerInterval); resolve(); });
+
+tasks.run();
+
+let onlineAlerts;
+let offlineAlerts;
+let currentDate;
+let currentMinute;
+
+const checkNodes = async () => {
+
+    console.log("Vérification des statuts des services...");
+
+    onlineAlerts = [];
+    offlineAlerts = [];
+    currentDate = Date.now();
+    currentMinute = Math.floor(currentDate / 1000 / 60);
+
+    let nodes;
+    try {
+        nodes = await query(database, "SELECT * FROM Nodes WHERE !Disabled");
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
         return;
-    }
-
-    if (request.method !== "POST") {
-        request.end(405, "Method not allowed");
-        return;
-    }
-
-    if (!request.headers.authorization) {
-        request.end(401, "Missing authorization");
-        return;
-    }
-
-    if (request.headers.authorization !== config.token) {
-        request.end(401, "Invalid token");
-        return;
-    }
-
-    if (!request.jsonBody) {
-        request.end(400, "Invalid JSON");
-        return;
-    }
-
-    if (typeof request.jsonBody.checks === "undefined") {
-        request.end(400, "Missing checks");
-        return;
-    }
-
-    if (!Array.isArray(request.jsonBody.checks)) {
-        request.end(400, "Checks must be an array");
-        return;
-    }
-
-    for (const check of request.jsonBody.checks) {
-
-        if (typeof check !== "object") {
-            request.end(400, "Check must be an object");
-            return;
-        }
-
-        if (typeof check.type === "undefined") {
-            request.end(400, "Missing type");
-            return;
-        }
-
-        if (typeof check.type !== "string") {
-            request.end(400, "Type must be a string");
-            return;
-        }
-
-        if (!["website", "minecraft", "api", "gateway", "bot"].includes(check.type)) {
-            request.end(400, "Invalid type");
-            return;
-        }
-
-        if (typeof check.host === "undefined") {
-            request.end(400, "Missing host");
-            return;
-        }
-
-        if (typeof check.host !== "string") {
-            request.end(400, "Host must be a string");
-            return;
-        }
     }
 
     const limit = pLimit(4);
 
-    const checks = await Promise.all(request.jsonBody.checks.map((check) => limit(async () => {
+    const checks = await Promise.all(nodes.map((node) => limit(async () => {
 
         let responseTime;
         try {
-            if (check.type === "website") responseTime = await checkWebsite(check.host);
-            else if (check.type === "minecraft") responseTime = await checkMinecraft(check.host);
-            else if (check.type === "api") responseTime = await checkApi(check.host);
-            else if (check.type === "gateway") responseTime = await checkWs(check.host);
-            else if (check.type === "bot") await checkBot(check.host);
+            if (node.Type === "website") responseTime = await checkWebsite(node.Host);
+            else if (node.Type === "minecraft") responseTime = await checkMinecraft(node.Host);
+            else if (node.Type === "api") responseTime = await checkApi(node.Host);
+            else if (node.Type === "gateway") responseTime = await checkWs(node.Host);
+            else if (node.Type === "bot") await checkBot(node.Host);
         } catch (error) {
             return { online: false, error: error.toString() };
         }
 
         return { online: true, responseTime };
-
     })));
 
-    request.end(200, { checks });
-});
+    for (let i = 0; i < nodes.length; i++) {
 
-const port = parseInt(process.env.PORT) || 8080;
-console.log("Lancement du serveur...");
-server.listen(port).then(() => {
-    console.log("Serveur lancé sur le port " + port + " !");
-}).catch((error) => {
-    console.log("Impossible de lancer serveur ! " + error);
-});
+        const node = nodes[i];
+        const check = checks[i];
+
+        if (node.Type !== "bot") {
+            if (check.online) await nodeOnline(node, check.responseTime);
+            else await nodeOffline(node, check.error);
+        } else {
+            if (check.online) await nodeOnline(node);
+            else if (error !== "Check failed") await nodeOffline(node, check.error);
+        }
+    }
+
+    if (offlineAlerts.length > 0) {
+        await alert({
+            title: `Service${offlineAlerts.length > 1 ? "s" : ""} Hors Ligne`,
+            description: offlineAlerts.map((node) => `:warning: **Le service **\`${node.Name}\`** est hors ligne.**\n${node.error}`).join("\n"),
+            timestamp: new Date(currentMinute * 1000 * 60),
+            color: "16711680"
+        });
+    }
+
+    if (onlineAlerts.length > 0) {
+
+        let stillDown;
+        try {
+            stillDown = await query(database, "SELECT Nodes.* FROM Nodes_Events INNER JOIN Nodes ON Nodes.Node_ID=Nodes_Events.Node_ID WHERE (Nodes_Events.Node_ID, Minute) IN (SELECT Node_ID, MAX(Minute) AS Minute FROM Nodes_Events GROUP BY Node_ID) && Online=0 && Disabled=0");
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+            return;
+        }
+
+        await alert({
+            title: `Service${onlineAlerts.length > 1 ? "s" : ""} En Ligne`,
+            description: [
+                ...onlineAlerts.map((node) => `:warning: **Le service **\`${node.Name}\`** est de nouveau en ligne.**`),
+                ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((node) => `**\`${node.Name}\`**`).join(", ") + ".**"] : [])
+            ].join("\n"),
+            timestamp: new Date(currentMinute * 1000 * 60),
+            color: "65280"
+        });
+    }
+
+    console.log("Vérification des statuts des services terminée !");
+}
+
+const getLastStatus = async (node) => {
+
+    let lastStatus;
+    try {
+        lastStatus = (await query(database, "SELECT * FROM Nodes_Events WHERE Node_ID=? ORDER BY Minute DESC LIMIT 1", [node.Node_ID]))[0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+
+    return lastStatus ? !!lastStatus.Online : false;
+}
+
+const nodeOnline = async (node, responseTime = -1) => {
+
+    if (!await getLastStatus(node)) {
+
+        try {
+            await query(database, "INSERT INTO Nodes_Events VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+        }
+
+        onlineAlerts.push(node);
+    }
+
+    try {
+        await query(database, "INSERT INTO Nodes_Statuses VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+
+    if (responseTime >= 0) {
+        try {
+            await query(database, "INSERT INTO Nodes_Response_Times VALUES (?, ?, ?)", [node.Node_ID, currentMinute, responseTime]);
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+        }
+    }
+
+    await updateDailyUptime(node);
+    await updateDailyResponseTime(node);
+}
+
+const nodeOffline = async (node, error) => {
+
+    if (await getLastStatus(node)) {
+
+        try {
+            await query(database, "INSERT INTO Nodes_Events VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+        }
+
+        offlineAlerts.push({ ...node, error });
+    }
+
+    try {
+        await query(database, "INSERT INTO Nodes_Statuses VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+
+    await updateDailyUptime(node);
+    await updateDailyResponseTime(node);
+}
+
+const updateDailyUptime = async (node) => {
+
+    const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
+    const firstMinute = day * 24 * 60;
+
+    let lastDailyUptime;
+    try {
+        lastDailyUptime = (await query(database, "SELECT * FROM Nodes_Daily_Uptimes WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    if (lastDailyUptime && lastDailyUptime.Day === day)
+        return;
+
+    let statuses;
+    try {
+        statuses = await query(database, "SELECT Minute, Online FROM Nodes_Statuses WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    const totalStatuses = [];
+    for (let minute = firstMinute; minute < firstMinute + 24 * 60; minute++) {
+        const status = statuses.find((status) => status.Minute === minute);
+        if (!status) continue;
+        totalStatuses.push(status.Online);
+    }
+
+    if (totalStatuses.length < 1) return;
+
+    const uptime = Math.round(totalStatuses.reduce((acc, status) => status ? acc + 1 : acc, 0) / totalStatuses.length * 100 * 100) / 100;
+
+    try {
+        await query(database, "INSERT INTO Nodes_Daily_Uptimes VALUES (?, ?, ?)", [node.Node_ID, day, uptime]);
+        await query(database, "DELETE FROM Nodes_Statuses WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+}
+
+const updateDailyResponseTime = async (node) => {
+
+    const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
+    const firstMinute = day * 24 * 60;
+
+    let lastDailyResponseTime;
+    try {
+        lastDailyResponseTime = (await query(database, "SELECT * FROM Nodes_Daily_Response_Times WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    if (lastDailyResponseTime && lastDailyResponseTime.Day === day)
+        return;
+
+    let responseTimes;
+    try {
+        responseTimes = await query(database, "SELECT Minute, Response_Time FROM Nodes_Response_Times WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    const totalResponseTimes = [];
+    for (let minute = firstMinute; minute < firstMinute + 24 * 60; minute++) {
+        const responseTime = responseTimes.find((responseTime) => responseTime.Minute === minute);
+        if (!responseTime) continue;
+        totalResponseTimes.push(responseTime.Response_Time);
+    }
+
+    if (totalResponseTimes.length < 1) return;
+
+    const averageResponseTime = Math.round(totalResponseTimes.reduce((acc, responseTime) => acc + responseTime, 0) / totalResponseTimes.length);
+
+    try {
+        await query(database, "INSERT INTO Nodes_Daily_Response_Times VALUES (?, ?, ?)", [node.Node_ID, day, averageResponseTime]);
+        await query(database, "DELETE FROM Nodes_Response_Times WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+}
+
+const alert = async (embed) => {
+
+    const rest = new REST({ version: "9" }).setToken(config.alertBotToken);
+
+    for (const alertUser of config.alertUsers) {
+        const channel = await rest.post("/users/@me/channels", { body: { recipients: [alertUser] } });
+        await rest.post("/channels/" + channel.id + "/messages", { body: { embeds: [embed] } });
+    }
+}
