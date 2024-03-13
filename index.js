@@ -1,6 +1,6 @@
 const { getConfig, HttpServer } = require("raraph84-lib");
 const pLimit = require("p-limit");
-const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checker");
+const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const config = getConfig(__dirname);
 
 const server = new HttpServer();
