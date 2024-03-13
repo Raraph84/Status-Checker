@@ -1,0 +1,4 @@
+node_modules/
+package-lock.json
+deploy.bat
+config.dev.json
