@@ -49,7 +49,7 @@ const checkNodes = async () => {
         return;
     }
 
-    const limit = pLimit(4);
+    const limit = pLimit(5);
 
     const checks = await Promise.all(nodes.map((node) => limit(async () => {
 
