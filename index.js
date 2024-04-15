@@ -21,7 +21,7 @@ tasks.addTask((resolve, reject) => {
 
 let checkerInterval;
 tasks.addTask((resolve) => {
-    checkerInterval = setInterval(() => checkNodes(), 5 * 60 * 1000);
+    checkerInterval = setInterval(() => checkNodes(), 60 * 1000);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
 
@@ -61,7 +61,7 @@ const checkNodes = async () => {
             else if (node.Type === "gateway") responseTime = await checkWs(node.Host);
             else if (node.Type === "bot") await checkBot(node.Host);
         } catch (error) {
-            return { online: false, error: error.toString() };
+            return { online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
         }
 
         return { online: true, responseTime };
