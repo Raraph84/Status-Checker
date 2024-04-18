@@ -1,5 +1,5 @@
-const { createPool } = require("mysql");
-const { getConfig, TaskManager, query } = require("raraph84-lib");
+const { createPool } = require("mysql2/promise");
+const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const pLimit = require("p-limit");
 const config = getConfig(__dirname);
@@ -9,16 +9,18 @@ require("dotenv").config({ path: [".env.local", ".env"] });
 const tasks = new TaskManager();
 
 const database = createPool({ password: process.env.DATABASE_PASSWORD, charset: "utf8mb4_general_ci", ...config.database });
-tasks.addTask((resolve, reject) => {
+tasks.addTask(async (resolve, reject) => {
     console.log("Connexion à la base de données...");
-    query(database, "SELECT 1").then(() => {
-        console.log("Connecté à la base de données !");
-        resolve();
-    }).catch((error) => {
+    try {
+        await database.query("SELECT 1");
+    } catch (error) {
         console.log("Impossible de se connecter à la base de données - " + error);
         reject();
-    });
-}, (resolve) => database.end(() => resolve()));
+        return;
+    }
+    console.log("Connecté à la base de données !");
+    resolve();
+}, (resolve) => database.end().then(() => resolve()));
 
 let checkerInterval;
 tasks.addTask((resolve) => {
@@ -44,7 +46,7 @@ const checkNodes = async () => {
 
     let nodes;
     try {
-        nodes = await query(database, "SELECT * FROM Nodes WHERE !Disabled");
+        nodes = await database.query("SELECT * FROM Nodes WHERE !Disabled");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -95,7 +97,7 @@ const checkNodes = async () => {
 
         let stillDown;
         try {
-            stillDown = await query(database, "SELECT Nodes.* FROM Nodes_Events INNER JOIN Nodes ON Nodes.Node_ID=Nodes_Events.Node_ID WHERE (Nodes_Events.Node_ID, Minute) IN (SELECT Node_ID, MAX(Minute) AS Minute FROM Nodes_Events GROUP BY Node_ID) && Online=0 && Disabled=0");
+            stillDown = await database.query("SELECT Nodes.* FROM Nodes_Events INNER JOIN Nodes ON Nodes.Node_ID=Nodes_Events.Node_ID WHERE (Nodes_Events.Node_ID, Minute) IN (SELECT Node_ID, MAX(Minute) AS Minute FROM Nodes_Events GROUP BY Node_ID) && Online=0 && Disabled=0");
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
             return;
@@ -119,7 +121,7 @@ const getLastStatus = async (node) => {
 
     let lastStatus;
     try {
-        lastStatus = (await query(database, "SELECT * FROM Nodes_Events WHERE Node_ID=? ORDER BY Minute DESC LIMIT 1", [node.Node_ID]))[0];
+        lastStatus = (await database.query("SELECT * FROM Nodes_Events WHERE Node_ID=? ORDER BY Minute DESC LIMIT 1", [node.Node_ID]))[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
@@ -132,7 +134,7 @@ const nodeOnline = async (node, responseTime = -1) => {
     if (!await getLastStatus(node)) {
 
         try {
-            await query(database, "INSERT INTO Nodes_Events VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
+            await database.query("INSERT INTO Nodes_Events VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -141,14 +143,14 @@ const nodeOnline = async (node, responseTime = -1) => {
     }
 
     try {
-        await query(database, "INSERT INTO Nodes_Statuses VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
+        await database.query("INSERT INTO Nodes_Statuses VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 
     if (responseTime >= 0) {
         try {
-            await query(database, "INSERT INTO Nodes_Response_Times VALUES (?, ?, ?)", [node.Node_ID, currentMinute, responseTime]);
+            await database.query("INSERT INTO Nodes_Response_Times VALUES (?, ?, ?)", [node.Node_ID, currentMinute, responseTime]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -163,7 +165,7 @@ const nodeOffline = async (node, error) => {
     if (await getLastStatus(node)) {
 
         try {
-            await query(database, "INSERT INTO Nodes_Events VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+            await database.query("INSERT INTO Nodes_Events VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -172,7 +174,7 @@ const nodeOffline = async (node, error) => {
     }
 
     try {
-        await query(database, "INSERT INTO Nodes_Statuses VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+        await database.query("INSERT INTO Nodes_Statuses VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
@@ -188,7 +190,7 @@ const updateDailyUptime = async (node) => {
 
     let lastDailyUptime;
     try {
-        lastDailyUptime = (await query(database, "SELECT * FROM Nodes_Daily_Uptimes WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
+        lastDailyUptime = (await database.query("SELECT * FROM Nodes_Daily_Uptimes WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -199,7 +201,7 @@ const updateDailyUptime = async (node) => {
 
     let statuses;
     try {
-        statuses = await query(database, "SELECT Minute, Online FROM Nodes_Statuses WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
+        statuses = await database.query("SELECT Minute, Online FROM Nodes_Statuses WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -217,8 +219,8 @@ const updateDailyUptime = async (node) => {
     const uptime = Math.round(totalStatuses.reduce((acc, status) => status ? acc + 1 : acc, 0) / totalStatuses.length * 100 * 100) / 100;
 
     try {
-        await query(database, "INSERT INTO Nodes_Daily_Uptimes VALUES (?, ?, ?)", [node.Node_ID, day, uptime]);
-        await query(database, "DELETE FROM Nodes_Statuses WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
+        await database.query("INSERT INTO Nodes_Daily_Uptimes VALUES (?, ?, ?)", [node.Node_ID, day, uptime]);
+        await database.query("DELETE FROM Nodes_Statuses WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
@@ -231,7 +233,7 @@ const updateDailyResponseTime = async (node) => {
 
     let lastDailyResponseTime;
     try {
-        lastDailyResponseTime = (await query(database, "SELECT * FROM Nodes_Daily_Response_Times WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
+        lastDailyResponseTime = (await database.query("SELECT * FROM Nodes_Daily_Response_Times WHERE Node_ID=? ORDER BY Day DESC LIMIT 1", [node.Node_ID]))[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -242,7 +244,7 @@ const updateDailyResponseTime = async (node) => {
 
     let responseTimes;
     try {
-        responseTimes = await query(database, "SELECT Minute, Response_Time FROM Nodes_Response_Times WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
+        responseTimes = await database.query("SELECT Minute, Response_Time FROM Nodes_Response_Times WHERE Node_ID=? && Minute>=?", [node.Node_ID, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -260,8 +262,8 @@ const updateDailyResponseTime = async (node) => {
     const averageResponseTime = Math.round(totalResponseTimes.reduce((acc, responseTime) => acc + responseTime, 0) / totalResponseTimes.length);
 
     try {
-        await query(database, "INSERT INTO Nodes_Daily_Response_Times VALUES (?, ?, ?)", [node.Node_ID, day, averageResponseTime]);
-        await query(database, "DELETE FROM Nodes_Response_Times WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
+        await database.query("INSERT INTO Nodes_Daily_Response_Times VALUES (?, ?, ?)", [node.Node_ID, day, averageResponseTime]);
+        await database.query("DELETE FROM Nodes_Response_Times WHERE Node_ID=? && Minute<?", [node.Node_ID, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }

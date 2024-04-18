@@ -1,5 +1,5 @@
-const { createPool } = require("mysql");
-const { getConfig, TaskManager, query } = require("raraph84-lib");
+const { createPool } = require("mysql2/promise");
+const { getConfig, TaskManager } = require("raraph84-lib");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -7,16 +7,18 @@ require("dotenv").config({ path: [".env.local", ".env"] });
 const tasks = new TaskManager();
 
 const database = createPool({ password: process.env.DATABASE_PASSWORD, charset: "utf8mb4_general_ci", ...config.database });
-tasks.addTask((resolve, reject) => {
+tasks.addTask(async (resolve, reject) => {
     console.log("Connexion à la base de données...");
-    query(database, "SELECT 1").then(() => {
-        console.log("Connecté à la base de données !");
-        resolve();
-    }).catch((error) => {
+    try {
+        await database.query("SELECT 1");
+    } catch (error) {
         console.log("Impossible de se connecter à la base de données - " + error);
         reject();
-    });
-}, (resolve) => database.end(() => resolve()));
+        return;
+    }
+    console.log("Connecté à la base de données !");
+    resolve();
+}, (resolve) => database.end().then(() => resolve()));
 
 const sqls = [];
 
@@ -24,7 +26,7 @@ tasks.addTask(async (resolve) => {
 
     let nodes;
     try {
-        nodes = await query(database, "SELECT * FROM Nodes");
+        nodes = await database.query("SELECT * FROM Nodes");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -35,7 +37,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesDailyResponseTimes;
     try {
-        nodesDailyResponseTimes = await query(database, "SELECT * FROM Nodes_Daily_Response_Times GROUP BY Node_ID");
+        nodesDailyResponseTimes = await database.query("SELECT * FROM Nodes_Daily_Response_Times GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -54,7 +56,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesDailyUptimes;
     try {
-        nodesDailyUptimes = await query(database, "SELECT * FROM Nodes_Daily_Uptimes GROUP BY Node_ID");
+        nodesDailyUptimes = await database.query("SELECT * FROM Nodes_Daily_Uptimes GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -73,7 +75,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesEvents;
     try {
-        nodesEvents = await query(database, "SELECT * FROM Nodes_Events GROUP BY Node_ID");
+        nodesEvents = await database.query("SELECT * FROM Nodes_Events GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -92,7 +94,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesResponseTimes;
     try {
-        nodesResponseTimes = await query(database, "SELECT * FROM Nodes_Response_Times GROUP BY Node_ID");
+        nodesResponseTimes = await database.query("SELECT * FROM Nodes_Response_Times GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -111,7 +113,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesStatuses;
     try {
-        nodesStatuses = await query(database, "SELECT * FROM Nodes_Statuses GROUP BY Node_ID");
+        nodesStatuses = await database.query("SELECT * FROM Nodes_Statuses GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -128,7 +130,7 @@ tasks.addTask(async (resolve) => {
 
     let pages;
     try {
-        pages = await query(database, "SELECT * FROM Pages");
+        pages = await database.query("SELECT * FROM Pages");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -139,7 +141,7 @@ tasks.addTask(async (resolve) => {
 
     let pagesNodes;
     try {
-        pagesNodes = await query(database, "SELECT * FROM Pages_Nodes");
+        pagesNodes = await database.query("SELECT * FROM Pages_Nodes");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -159,7 +161,7 @@ tasks.addTask(async (resolve) => {
 
     let pagesSubpages;
     try {
-        pagesSubpages = await query(database, "SELECT * FROM Pages_Subpages");
+        pagesSubpages = await database.query("SELECT * FROM Pages_Subpages");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -177,7 +179,7 @@ tasks.addTask(async (resolve) => {
 
     console.log("Finished !");
     console.log(sqls.join("\n"));
-    database.end();
+    await database.end();
     resolve();
 
 }, (resolve) => resolve());
