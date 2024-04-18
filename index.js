@@ -1,5 +1,4 @@
 const { createPool } = require("mysql");
-const { REST } = require("@discordjs/rest");
 const { getConfig, TaskManager, query } = require("raraph84-lib");
 const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const pLimit = require("p-limit");
@@ -266,12 +265,4 @@ const updateDailyResponseTime = async (node) => {
     }
 }
 
-const alert = async (embed) => {
-
-    const rest = new REST({ version: "9" }).setToken(config.alertBotToken);
-
-    for (const alertUser of config.alertUsers) {
-        const channel = await rest.post("/users/@me/channels", { body: { recipients: [alertUser] } });
-        await rest.post("/channels/" + channel.id + "/messages", { body: { embeds: [embed] } });
-    }
-}
+const alert = (embed) => fetch(config.alertWebhook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embeds: [embed] }) });

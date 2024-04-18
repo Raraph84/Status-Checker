@@ -5,8 +5,5 @@
         "password": "w0nLzcbQtO",
         "database": "Status"
     },
-    "alertBotToken": "NzU0MjU1NzE1NjAxNzQzODcz.X1yFXw.Zol4CBC7sbfOHHDZSFdVgvYljnw",
-    "alertUsers": [
-        "486801186419245060"
-    ]
+    "alertWebhook": "https://discord.com/api/webhooks/1230570614788456528/N8mHe9Bvvd262NCuBPE5x2Ra3yXL1yzlRkC1NJ8c3cTzb3CqAJU55VfPgmvOQ2LchqZB"
 }

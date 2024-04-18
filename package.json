@@ -7,7 +7,6 @@
   "author": "Raraph84",
   "license": "ISC",
   "dependencies": {
-    "@discordjs/rest": "^2.2.0",
     "minecraft-ping-js": "^1.0.2",
     "mysql": "^2.18.1",
     "p-limit": "^3.1.0",
