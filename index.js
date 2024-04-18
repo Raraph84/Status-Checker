@@ -4,9 +4,11 @@ const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require(".
 const pLimit = require("p-limit");
 const config = getConfig(__dirname);
 
+require("dotenv").config({ path: [".env.local", ".env"] });
+
 const tasks = new TaskManager();
 
-const database = createPool(config.database);
+const database = createPool({ password: process.env.DATABASE_PASSWORD, charset: "utf8mb4_general_ci", ...config.database });
 tasks.addTask((resolve, reject) => {
     console.log("Connexion à la base de données...");
     query(database, "SELECT 1").then(() => {

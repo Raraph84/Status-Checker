@@ -2,9 +2,11 @@ const { createPool } = require("mysql");
 const { getConfig, TaskManager, query } = require("raraph84-lib");
 const config = getConfig(__dirname);
 
+require("dotenv").config({ path: [".env.local", ".env"] });
+
 const tasks = new TaskManager();
 
-const database = createPool(config.database);
+const database = createPool({ password: process.env.DATABASE_PASSWORD, charset: "utf8mb4_general_ci", ...config.database });
 tasks.addTask((resolve, reject) => {
     console.log("Connexion à la base de données...");
     query(database, "SELECT 1").then(() => {
@@ -18,7 +20,7 @@ tasks.addTask((resolve, reject) => {
 
 const sqls = [];
 
-tasks.addTask(async (resolve, reject) => {
+tasks.addTask(async (resolve) => {
 
     let nodes;
     try {
@@ -175,7 +177,8 @@ tasks.addTask(async (resolve, reject) => {
 
     console.log("Finished !");
     console.log(sqls.join("\n"));
-    reject();
+    database.end();
+    resolve();
 
 }, (resolve) => resolve());
 

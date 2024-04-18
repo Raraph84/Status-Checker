@@ -2,3 +2,5 @@
 /package-lock.json
 /deploy.bat
 /config.dev.json
+/.env
+/.env.local
