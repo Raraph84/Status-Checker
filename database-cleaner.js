@@ -26,7 +26,7 @@ tasks.addTask(async (resolve) => {
 
     let nodes;
     try {
-        nodes = await database.query("SELECT * FROM Nodes");
+        [nodes] = await database.query("SELECT * FROM Nodes");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -37,7 +37,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesDailyResponseTimes;
     try {
-        nodesDailyResponseTimes = await database.query("SELECT * FROM Nodes_Daily_Response_Times GROUP BY Node_ID");
+        [nodesDailyResponseTimes] = await database.query("SELECT * FROM Nodes_Daily_Response_Times GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -56,7 +56,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesDailyUptimes;
     try {
-        nodesDailyUptimes = await database.query("SELECT * FROM Nodes_Daily_Uptimes GROUP BY Node_ID");
+        [nodesDailyUptimes] = await database.query("SELECT * FROM Nodes_Daily_Uptimes GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -75,7 +75,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesEvents;
     try {
-        nodesEvents = await database.query("SELECT * FROM Nodes_Events GROUP BY Node_ID");
+        [nodesEvents] = await database.query("SELECT * FROM Nodes_Events GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -94,7 +94,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesResponseTimes;
     try {
-        nodesResponseTimes = await database.query("SELECT * FROM Nodes_Response_Times GROUP BY Node_ID");
+        [nodesResponseTimes] = await database.query("SELECT * FROM Nodes_Response_Times GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -113,7 +113,7 @@ tasks.addTask(async (resolve) => {
 
     let nodesStatuses;
     try {
-        nodesStatuses = await database.query("SELECT * FROM Nodes_Statuses GROUP BY Node_ID");
+        [nodesStatuses] = await database.query("SELECT * FROM Nodes_Statuses GROUP BY Node_ID");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -130,7 +130,7 @@ tasks.addTask(async (resolve) => {
 
     let pages;
     try {
-        pages = await database.query("SELECT * FROM Pages");
+        [pages] = await database.query("SELECT * FROM Pages");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -141,7 +141,7 @@ tasks.addTask(async (resolve) => {
 
     let pagesNodes;
     try {
-        pagesNodes = await database.query("SELECT * FROM Pages_Nodes");
+        [pagesNodes] = await database.query("SELECT * FROM Pages_Nodes");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
@@ -161,7 +161,7 @@ tasks.addTask(async (resolve) => {
 
     let pagesSubpages;
     try {
-        pagesSubpages = await database.query("SELECT * FROM Pages_Subpages");
+        [pagesSubpages] = await database.query("SELECT * FROM Pages_Subpages");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         reject();
