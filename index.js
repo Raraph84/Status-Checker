@@ -1,3 +1,4 @@
+const { promises: dns } = require("dns");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
@@ -52,28 +53,41 @@ const checkNodes = async () => {
         return;
     }
 
-    const limit = pLimit(5);
+    const servers = [];
+    for (const node of nodes) {
+        const serverIp = (await dns.lookup(node.Type !== "minecraft" ? node.Host.split(/:\/\/|:|\//)[1] : node.Host.split(/:/)[0])).address;
+        const server = servers.find((server) => server.ip === serverIp);
+        if (!server) servers.push({ ip: serverIp, nodes: [node] });
+        else server.nodes.push(node);
+    }
 
-    const checks = await Promise.all(nodes.map((node) => limit(async () => {
+    const checks = [];
+    for (const server of servers) {
 
-        let responseTime;
-        try {
-            if (node.Type === "website") responseTime = await checkWebsite(node.Host);
-            else if (node.Type === "minecraft") responseTime = await checkMinecraft(node.Host);
-            else if (node.Type === "api") responseTime = await checkApi(node.Host);
-            else if (node.Type === "gateway") responseTime = await checkWs(node.Host);
-            else if (node.Type === "bot") await checkBot(node.Host);
-        } catch (error) {
-            return { online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
-        }
+        const limit = pLimit(5);
 
-        return { online: true, responseTime };
-    })));
+        const serverChecks = await Promise.all(server.nodes.map((node) => limit(async () => {
 
-    for (let i = 0; i < nodes.length; i++) {
+            let responseTime;
+            try {
+                if (node.Type === "website") responseTime = await checkWebsite(node.Host);
+                else if (node.Type === "minecraft") responseTime = await checkMinecraft(node.Host);
+                else if (node.Type === "api") responseTime = await checkApi(node.Host);
+                else if (node.Type === "gateway") responseTime = await checkWs(node.Host);
+                else if (node.Type === "bot") await checkBot(node.Host);
+            } catch (error) {
+                return { nodeId: node.Node_ID, online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
+            }
 
-        const node = nodes[i];
-        const check = checks[i];
+            return { nodeId: node.Node_ID, online: true, responseTime };
+        })));
+
+        checks.push(...serverChecks);
+    }
+
+    for (const node of nodes) {
+
+        const check = checks.find((check) => check.nodeId === node.Node_ID);
 
         if (node.Type !== "bot") {
             if (check.online) await nodeOnline(node, check.responseTime);
