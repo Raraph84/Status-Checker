@@ -269,4 +269,4 @@ const updateDailyResponseTime = async (node) => {
     }
 }
 
-const alert = (embed) => fetch(config.alertWebhook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embeds: [embed] }) });
+const alert = (embed) => fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ embeds: [embed] }) });
