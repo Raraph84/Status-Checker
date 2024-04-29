@@ -31,19 +31,14 @@ tasks.addTask((resolve) => {
 
 tasks.run();
 
-let onlineAlerts;
-let offlineAlerts;
-let currentDate;
-let currentMinute;
-
 const checkNodes = async () => {
 
     console.log("Vérification des statuts des services...");
 
-    onlineAlerts = [];
-    offlineAlerts = [];
-    currentDate = Date.now();
-    currentMinute = Math.floor(currentDate / 1000 / 60);
+    const onlineAlerts = [];
+    const offlineAlerts = [];
+    const currentDate = Date.now();
+    const currentMinute = Math.floor(currentDate / 1000 / 60);
 
     let nodes;
     try {
@@ -89,12 +84,12 @@ const checkNodes = async () => {
 
         const check = checks.find((check) => check.nodeId === node.Node_ID);
 
-        if (node.Type !== "bot") {
-            if (check.online) await nodeOnline(node, check.responseTime);
-            else await nodeOffline(node, check.error);
+        if (check.online) {
+            const alreadyOnline = await nodeOnline(node, node.Type !== "bot" ? check.responseTime : -1, currentDate);
+            if (!alreadyOnline) onlineAlerts.push(node);
         } else {
-            if (check.online) await nodeOnline(node);
-            else if (error !== "Check failed") await nodeOffline(node, check.error);
+            const alreadyOffline = await nodeOffline(node, currentDate);
+            if (alreadyOffline) offlineAlerts.push({ ...node, error: check.error });
         }
     }
 
@@ -144,7 +139,9 @@ const getLastStatus = async (node) => {
     return lastStatus ? !!lastStatus.Online : false;
 }
 
-const nodeOnline = async (node, responseTime = -1) => {
+const nodeOnline = async (node, responseTime, currentDate) => {
+
+    const currentMinute = Math.floor(currentDate / 1000 / 60);
 
     if (!await getLastStatus(node)) {
 
@@ -154,7 +151,7 @@ const nodeOnline = async (node, responseTime = -1) => {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
 
-        onlineAlerts.push(node);
+        return false;
     }
 
     try {
@@ -171,11 +168,15 @@ const nodeOnline = async (node, responseTime = -1) => {
         }
     }
 
-    await updateDailyUptime(node);
+    await updateDailyUptime(node, currentDate);
     await updateDailyResponseTime(node);
+
+    return true;
 }
 
-const nodeOffline = async (node, error) => {
+const nodeOffline = async (node, currentDate) => {
+
+    const currentMinute = Math.floor(currentDate / 1000 / 60);
 
     if (await getLastStatus(node)) {
 
@@ -185,7 +186,7 @@ const nodeOffline = async (node, error) => {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
 
-        offlineAlerts.push({ ...node, error });
+        return false;
     }
 
     try {
@@ -194,11 +195,13 @@ const nodeOffline = async (node, error) => {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 
-    await updateDailyUptime(node);
+    await updateDailyUptime(node, currentDate);
     await updateDailyResponseTime(node);
+
+    return true;
 }
 
-const updateDailyUptime = async (node) => {
+const updateDailyUptime = async (node, currentDate) => {
 
     const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
     const firstMinute = day * 24 * 60;
@@ -242,7 +245,7 @@ const updateDailyUptime = async (node) => {
     }
 }
 
-const updateDailyResponseTime = async (node) => {
+const updateDailyResponseTime = async (node, currentDate) => {
 
     const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
     const firstMinute = day * 24 * 60;
