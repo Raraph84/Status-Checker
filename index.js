@@ -49,14 +49,22 @@ const checkNodes = async () => {
     }
 
     const servers = [];
+    const checks = [];
+
     for (const node of nodes) {
-        const serverIp = (await dns.lookup(node.Type !== "minecraft" ? node.Host.split(/:\/\/|:|\//)[1] : node.Host.split(/:/)[0])).address;
+        const domain = node.Type !== "minecraft" ? node.Host.split(/:\/\/|:|\//)[1] : node.Host.split(/:/)[0];
+        let serverIp;
+        try {
+            serverIp = (await dns.lookup(domain)).address;
+        } catch (error) {
+            checks.push({ nodeId: node.Node_ID, online: false, error: error.toString() });
+            continue;
+        }
         const server = servers.find((server) => server.ip === serverIp);
         if (!server) servers.push({ ip: serverIp, nodes: [node] });
         else server.nodes.push(node);
     }
 
-    const checks = [];
     for (const server of servers) {
 
         const limit = pLimit(5);
