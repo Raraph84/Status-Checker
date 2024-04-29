@@ -89,7 +89,7 @@ const checkNodes = async () => {
             if (!alreadyOnline) onlineAlerts.push(node);
         } else {
             const alreadyOffline = await nodeOffline(node, currentDate);
-            if (alreadyOffline) offlineAlerts.push({ ...node, error: check.error });
+            if (!alreadyOffline) offlineAlerts.push({ ...node, error: check.error });
         }
     }
 
@@ -169,7 +169,7 @@ const nodeOnline = async (node, responseTime, currentDate) => {
     }
 
     await updateDailyUptime(node, currentDate);
-    await updateDailyResponseTime(node);
+    await updateDailyResponseTime(node, currentDate);
 
     return true;
 }
@@ -196,7 +196,7 @@ const nodeOffline = async (node, currentDate) => {
     }
 
     await updateDailyUptime(node, currentDate);
-    await updateDailyResponseTime(node);
+    await updateDailyResponseTime(node, currentDate);
 
     return true;
 }
