@@ -67,7 +67,7 @@ const checkNodes = async () => {
 
     for (const server of servers) {
 
-        const limit = pLimit(5);
+        const limit = pLimit(Math.max(5, Math.ceil(10 * server.nodes.length / 60)));
 
         const serverChecks = await Promise.all(server.nodes.map((node) => limit(async () => {
 
