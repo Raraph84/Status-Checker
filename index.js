@@ -144,15 +144,15 @@ const nodeOnline = async (node, responseTime, currentDate) => {
 
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    if (!await getLastStatus(node)) {
+    const alreadyOnline = await getLastStatus(node);
+
+    if (!alreadyOnline) {
 
         try {
             await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
-
-        return false;
     }
 
     try {
@@ -163,22 +163,22 @@ const nodeOnline = async (node, responseTime, currentDate) => {
 
     await updateDailyStatuses(node, currentDate);
 
-    return true;
+    return alreadyOnline;
 };
 
 const nodeOffline = async (node, currentDate) => {
 
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    if (await getLastStatus(node)) {
+    const alreadyOffline = !await getLastStatus(node);
+
+    if (!alreadyOffline) {
 
         try {
             await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
-
-        return false;
     }
 
     try {
@@ -189,7 +189,7 @@ const nodeOffline = async (node, currentDate) => {
 
     await updateDailyStatuses(node, currentDate);
 
-    return true;
+    return alreadyOffline;
 };
 
 const updateDailyStatuses = async (node, currentDate) => {
