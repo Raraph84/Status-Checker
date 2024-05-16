@@ -25,25 +25,22 @@ tasks.addTask(async (resolve, reject) => {
 
 let checkerInterval;
 tasks.addTask((resolve) => {
-    checkerInterval = setInterval(() => checkNodes(), 60 * 1000);
+    checkerInterval = setInterval(() => checkServices(), 60 * 1000);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
 
 tasks.run();
 
-const checkNodes = async () => {
+const checkServices = async () => {
 
     console.log("Vérification des statuts des services...");
 
-    const onlineAlerts = [];
-    const offlineAlerts = [];
-    const stillDown = [];
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    let nodes;
+    let services;
     try {
-        [nodes] = await database.query("SELECT * FROM Nodes WHERE !Disabled");
+        [services] = await database.query("SELECT * FROM services WHERE !disabled");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -52,61 +49,63 @@ const checkNodes = async () => {
     const servers = [];
     const checks = [];
 
-    for (const node of nodes) {
-        const domain = node.Type !== "minecraft" ? node.Host.split(/:\/\/|:|\//)[1] : node.Host.split(/:/)[0];
+    for (const service of services) {
+        const domain = service.type !== "minecraft" ? service.host.split(/:\/\/|:|\//)[1] : service.host.split(/:/)[0];
         let serverIp;
         try {
             serverIp = (await dns.lookup(domain)).address;
         } catch (error) {
-            checks.push({ nodeId: node.Node_ID, online: false, error: error.toString() });
+            checks.push({ serviceId: service.service_id, online: false, error: error.toString() });
             continue;
         }
         const server = servers.find((server) => server.ip === serverIp);
-        if (!server) servers.push({ ip: serverIp, nodes: [node] });
-        else server.nodes.push(node);
+        if (!server) servers.push({ ip: serverIp, services: [service] });
+        else server.services.push(service);
     }
 
     for (const server of servers) {
 
-        const limit = pLimit(Math.max(5, Math.ceil(10 * server.nodes.length / 60)));
+        const limit = pLimit(Math.max(5, Math.ceil(10 * server.services.length / 60)));
 
-        const serverChecks = await Promise.all(server.nodes.map((node) => limit(async () => {
+        checks.push(...await Promise.all(server.services.map((service) => limit(async () => {
 
-            let responseTime;
+            let responseTime = -1;
             try {
-                if (node.Type === "website") responseTime = await checkWebsite(node.Host);
-                else if (node.Type === "minecraft") responseTime = await checkMinecraft(node.Host);
-                else if (node.Type === "api") responseTime = await checkApi(node.Host);
-                else if (node.Type === "gateway") responseTime = await checkWs(node.Host);
-                else if (node.Type === "bot") await checkBot(node.Host);
+                if (service.Type === "website") responseTime = await checkWebsite(service.host);
+                else if (service.Type === "minecraft") responseTime = await checkMinecraft(service.host);
+                else if (service.Type === "api") responseTime = await checkApi(service.host);
+                else if (service.Type === "gateway") responseTime = await checkWs(service.host);
+                else if (service.Type === "bot") await checkBot(service.host);
             } catch (error) {
-                return { nodeId: node.Node_ID, online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
+                return { serviceId: service.service_id, online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
             }
 
-            return { nodeId: node.Node_ID, online: true, responseTime };
-        })));
-
-        checks.push(...serverChecks);
+            return { serviceId: service.service_id, online: true, responseTime };
+        }))));
     }
 
-    for (const node of nodes) {
+    const onlineAlerts = [];
+    const offlineAlerts = [];
+    const stillDown = [];
 
-        const check = checks.find((check) => check.nodeId === node.Node_ID);
+    for (const service of services) {
+
+        const check = checks.find((check) => check.serviceId === service.service_id);
 
         if (check.online) {
-            const alreadyOnline = await nodeOnline(node, node.Type !== "bot" ? check.responseTime : -1, currentDate);
-            if (!alreadyOnline) onlineAlerts.push(node);
+            const alreadyOnline = await serviceOnline(service, check.responseTime, currentDate);
+            if (!alreadyOnline) onlineAlerts.push(service);
         } else {
-            const alreadyOffline = await nodeOffline(node, currentDate);
-            if (!alreadyOffline) offlineAlerts.push({ ...node, error: check.error });
-            stillDown.push(node);
+            const alreadyOffline = await serviceOffline(service, currentDate);
+            if (!alreadyOffline) offlineAlerts.push({ ...service, error: check.error });
+            stillDown.push(service);
         }
     }
 
     if (offlineAlerts.length > 0) {
         await alert({
             title: `Service${offlineAlerts.length > 1 ? "s" : ""} Hors Ligne`,
-            description: offlineAlerts.map((node) => `:warning: **Le service **\`${node.Name}\`** est hors ligne.**\n${node.error}`).join("\n"),
+            description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
             color: "16711680"
         });
@@ -116,8 +115,8 @@ const checkNodes = async () => {
         await alert({
             title: `Service${onlineAlerts.length > 1 ? "s" : ""} En Ligne`,
             description: [
-                ...onlineAlerts.map((node) => `:warning: **Le service **\`${node.Name}\`** est de nouveau en ligne.**`),
-                ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((node) => `**\`${node.Name}\`**`).join(", ") + ".**"] : [])
+                ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
+                ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
             ].join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
             color: "65280"
@@ -127,11 +126,11 @@ const checkNodes = async () => {
     console.log("Vérification des statuts des services terminée !");
 };
 
-const getLastStatus = async (node) => {
+const getLastStatus = async (service) => {
 
     let lastEvent;
     try {
-        [lastEvent] = await database.query("SELECT * FROM services_events WHERE service_id=? ORDER BY minute DESC LIMIT 1", [node.Node_ID]);
+        [lastEvent] = await database.query("SELECT * FROM services_events WHERE service_id=? ORDER BY minute DESC LIMIT 1", [service.service_id]);
         lastEvent = lastEvent[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
@@ -140,59 +139,59 @@ const getLastStatus = async (node) => {
     return !!lastEvent?.online || false;
 };
 
-const nodeOnline = async (node, responseTime, currentDate) => {
+const serviceOnline = async (service, responseTime, currentDate) => {
 
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    const alreadyOnline = await getLastStatus(node);
+    const alreadyOnline = await getLastStatus(service);
 
     if (!alreadyOnline) {
 
         try {
-            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 1)", [node.Node_ID, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 1)", [service.service_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
     }
 
     try {
-        await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [node.Node_ID, currentMinute, responseTime >= 0 ? responseTime : null]);
+        await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime >= 0 ? responseTime : null]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 
-    await updateDailyStatuses(node, currentDate);
+    await updateDailyStatuses(service, currentDate);
 
     return alreadyOnline;
 };
 
-const nodeOffline = async (node, currentDate) => {
+const serviceOffline = async (service, currentDate) => {
 
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    const alreadyOffline = !await getLastStatus(node);
+    const alreadyOffline = !await getLastStatus(service);
 
     if (!alreadyOffline) {
 
         try {
-            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
     }
 
     try {
-        await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [node.Node_ID, currentMinute]);
+        await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 
-    await updateDailyStatuses(node, currentDate);
+    await updateDailyStatuses(service, currentDate);
 
     return alreadyOffline;
 };
 
-const updateDailyStatuses = async (node, currentDate) => {
+const updateDailyStatuses = async (service, currentDate) => {
 
     const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
     const firstMinute = day * 24 * 60;
@@ -200,7 +199,7 @@ const updateDailyStatuses = async (node, currentDate) => {
 
     let lastDailyStatus;
     try {
-        [lastDailyStatus] = await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? ORDER BY day DESC LIMIT 1", [node.Node_ID]);
+        [lastDailyStatus] = await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? ORDER BY day DESC LIMIT 1", [service.service_id]);
         lastDailyStatus = lastDailyStatus[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
@@ -212,7 +211,7 @@ const updateDailyStatuses = async (node, currentDate) => {
 
     let statuses;
     try {
-        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [node.Node_ID, firstMinute, lastMinute]);
+        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [service.service_id, firstMinute, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -223,8 +222,8 @@ const updateDailyStatuses = async (node, currentDate) => {
     const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length) : null;
 
     try {
-        await database.query("INSERT INTO services_daily_statuses (service_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?)", [node.Node_ID, day, statuses.length, uptime, responseTime]);
-        await database.query("DELETE FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [node.Node_ID, firstMinute, lastMinute]);
+        await database.query("INSERT INTO services_daily_statuses (service_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?)", [service.service_id, day, statuses.length, uptime, responseTime]);
+        await database.query("DELETE FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [service.service_id, firstMinute, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
