@@ -69,13 +69,13 @@ const checkServices = async () => {
 
         checks.push(...await Promise.all(server.services.map((service) => limit(async () => {
 
-            let responseTime = -1;
+            let responseTime = null;
             try {
-                if (service.Type === "website") responseTime = await checkWebsite(service.host);
-                else if (service.Type === "minecraft") responseTime = await checkMinecraft(service.host);
-                else if (service.Type === "api") responseTime = await checkApi(service.host);
-                else if (service.Type === "gateway") responseTime = await checkWs(service.host);
-                else if (service.Type === "bot") await checkBot(service.host);
+                if (service.type === "website") responseTime = await checkWebsite(service.host);
+                else if (service.type === "minecraft") responseTime = await checkMinecraft(service.host);
+                else if (service.type === "api") responseTime = await checkApi(service.host);
+                else if (service.type === "gateway") responseTime = await checkWs(service.host);
+                else if (service.type === "bot") await checkBot(service.host);
             } catch (error) {
                 return { serviceId: service.service_id, online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
             }
@@ -155,7 +155,7 @@ const serviceOnline = async (service, responseTime, currentDate) => {
     }
 
     try {
-        await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime >= 0 ? responseTime : null]);
+        await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
