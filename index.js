@@ -1,4 +1,5 @@
 const { promises: dns } = require("dns");
+const { isIP } = require("net");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
@@ -56,11 +57,14 @@ const checkServices = async () => {
         else if (service.type === "minecraft") domain = service.host.split(/:/)[0];
         else domain = service.host.split(/:\/\/|:|\//)[1];
         let serverIp;
-        try {
-            serverIp = (await dns.lookup(domain)).address;
-        } catch (error) {
-            checks.push({ serviceId: service.service_id, online: false, error });
-            continue;
+        if (isIP(domain)) serverIp = domain;
+        else {
+            try {
+                serverIp = (await dns.lookup(domain)).address;
+            } catch (error) {
+                checks.push({ serviceId: service.service_id, online: false, error });
+                continue;
+            }
         }
         const server = servers.find((server) => server.ip === serverIp);
         if (!server) servers.push({ ip: serverIp, services: [service], ping: null });
