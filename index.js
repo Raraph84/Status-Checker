@@ -25,6 +25,7 @@ tasks.addTask(async (resolve, reject) => {
 
 let checkerInterval;
 tasks.addTask((resolve) => {
+    checkServices();
     checkerInterval = setInterval(() => checkServices(), 60 * 1000);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
@@ -66,7 +67,7 @@ const checkServices = async () => {
         else server.services.push(service);
     }
 
-    await Promise.all(servers.map(async (server) => {
+    await Promise.all(servers.filter((server) => server.services.some((service) => service.type === "server")).map(async (server) => {
 
         let responseTime = null;
         try {
@@ -88,7 +89,7 @@ const checkServices = async () => {
             if (service.type === "server")
                 return { serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error };
 
-            if (!server.online)
+            if (server.ping && !server.ping.online)
                 return { serviceId: service.service_id, online: false, error: server.error };
 
             let responseTime = null;

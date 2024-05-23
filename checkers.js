@@ -4,16 +4,21 @@ const { pingWithPromise } = require("minecraft-ping-js");
 const Ws = require("ws");
 const ping = require("net-ping");
 
+let pingSession = 0;
+
 const checkServer = (host) => new Promise((resolve, reject) => {
 
-    const session = ping.createSession();
+    const session = ping.createSession({
+        networkProtocol: !host.includes(":") ? ping.NetworkProtocol.IPv4 : ping.NetworkProtocol.IPv6,
+        sessionId: pingSession++,
+        retries: 0
+    });
     session.pingHost(host, (error) => {
         if (error) reject(error);
         else {
-            const date = Date.now();
-            session.pingHost(host, (error) => {
+            session.pingHost(host, (error, target, a, b) => {
                 if (error) reject(error);
-                else resolve(Date.now() - date);
+                else resolve(b.getTime() - a.getTime());
             });
         }
     });
