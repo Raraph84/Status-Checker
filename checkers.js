@@ -2,6 +2,22 @@ const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
 const Ws = require("ws");
+const ping = require("net-ping");
+
+const checkServer = (host) => new Promise((resolve, reject) => {
+
+    const session = ping.createSession();
+    session.pingHost(host, (error) => {
+        if (error) reject(error);
+        else {
+            const date = Date.now();
+            session.pingHost(host, (error) => {
+                if (error) reject(error);
+                else resolve(Date.now() - date);
+            });
+        }
+    });
+});
 
 const checkWebsite = (host) => new Promise((resolve, reject) => {
 
@@ -111,6 +127,7 @@ const checkMinecraft = (host) => new Promise((resolve, reject) => {
 });
 
 module.exports = {
+    checkServer,
     checkWebsite,
     checkApi,
     checkWs,

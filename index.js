@@ -1,7 +1,7 @@
 const { promises: dns } = require("dns");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
-const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
+const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const pLimit = require("p-limit");
 const config = getConfig(__dirname);
 
@@ -50,24 +50,46 @@ const checkServices = async () => {
     const checks = [];
 
     for (const service of services) {
-        const domain = service.type !== "minecraft" ? service.host.split(/:\/\/|:|\//)[1] : service.host.split(/:/)[0];
+        let domain;
+        if (service.type === "server") domain = service.host;
+        else if (service.type === "minecraft") domain = service.host.split(/:/)[0];
+        else domain = service.host.split(/:\/\/|:|\//)[1];
         let serverIp;
         try {
             serverIp = (await dns.lookup(domain)).address;
         } catch (error) {
-            checks.push({ serviceId: service.service_id, online: false, error: error.toString() });
+            checks.push({ serviceId: service.service_id, online: false, error });
             continue;
         }
         const server = servers.find((server) => server.ip === serverIp);
-        if (!server) servers.push({ ip: serverIp, services: [service] });
+        if (!server) servers.push({ ip: serverIp, services: [service], ping: null });
         else server.services.push(service);
     }
+
+    await Promise.all(servers.map(async (server) => {
+
+        let responseTime = null;
+        try {
+            responseTime = await checkServer(server.ip);
+        } catch (error) {
+            server.ping = { online: false, responseTime, error };
+            return;
+        }
+
+        server.ping = { online: true, responseTime, error: null };
+    }));
 
     for (const server of servers) {
 
         const limit = pLimit(Math.max(5, Math.ceil(10 * server.services.length / 60)));
 
         checks.push(...await Promise.all(server.services.map((service) => limit(async () => {
+
+            if (service.type === "server")
+                return { serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error };
+
+            if (!server.online)
+                return { serviceId: service.service_id, online: false, error: server.error };
 
             let responseTime = null;
             try {
@@ -77,12 +99,14 @@ const checkServices = async () => {
                 else if (service.type === "gateway") responseTime = await checkWs(service.host);
                 else if (service.type === "bot") await checkBot(service.host);
             } catch (error) {
-                return { serviceId: service.service_id, online: false, error: error instanceof AggregateError ? error.errors.map((error) => error.toString()).join(" - ") : error.toString() };
+                return { serviceId: service.service_id, online: false, error };
             }
 
             return { serviceId: service.service_id, online: true, responseTime };
         }))));
     }
+
+    checks.filter((check) => check.error).forEach((check) => check.error = check.error instanceof AggregateError ? check.error.errors.map((error) => error.toString()).join(" - ") : check.error.toString());
 
     const onlineAlerts = [];
     const offlineAlerts = [];
