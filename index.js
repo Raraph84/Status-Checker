@@ -93,8 +93,8 @@ const checkServices = async () => {
             if (service.type === "server")
                 return { serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error };
 
-            if (server.ping && !server.ping.online)
-                return { serviceId: service.service_id, online: false, error: server.ping.error };
+            //if (server.ping && !server.ping.online)
+            //    return { serviceId: service.service_id, online: false, error: server.ping.error };
 
             let responseTime = null;
             try {

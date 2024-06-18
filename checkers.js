@@ -1,26 +1,31 @@
+const { spawn } = require("child_process");
 const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
 const Ws = require("ws");
-const ping = require("net-ping");
-
-let pingSession = 0;
 
 const checkServer = (host) => new Promise((resolve, reject) => {
 
-    const session = ping.createSession({
-        networkProtocol: !host.includes(":") ? ping.NetworkProtocol.IPv4 : ping.NetworkProtocol.IPv6,
-        sessionId: pingSession++,
-        retries: 0
-    });
-    session.pingHost(host, (error) => {
-        if (error) reject(error);
-        else {
-            session.pingHost(host, (error, target, a, b) => {
-                if (error) reject(error);
-                else resolve(b.getTime() - a.getTime());
-            });
+    const proc = spawn("ping", ["-n", "-W", "2", "-w", "2", "-c", "1", host]);
+
+    let output = "";
+    proc.stdout.on("data", (data) => output += data);
+    proc.stderr.on("data", (data) => output += data);
+
+    proc.on("error", (error) => reject(error));
+    proc.on("close", () => {
+
+        const lines = output.split("\n");
+
+        for (const line of lines) {
+
+            if (!line.startsWith("64 bytes from")) continue;
+
+            resolve(parseFloat(line.split("time=")[1].split(" ")[0]));
+            return;
         }
+
+        reject(new Error("Ping timed out"));
     });
 });
 
