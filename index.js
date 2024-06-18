@@ -3,7 +3,6 @@ const { isIP } = require("net");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
-const pLimit = require("p-limit");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -86,9 +85,26 @@ const checkServices = async () => {
 
     for (const server of servers) {
 
-        const limit = pLimit(Math.max(5, Math.ceil(10 * server.services.length / 60)));
+        const maxConcurrent = Math.max(5, Math.ceil(10 * server.services.length / 60));
+        const fns = [];
+        let running = 0;
+        const limit = (shift, fn) => new Promise((resolve) => {
 
-        checks.push(...await Promise.all(server.services.map((service) => limit(async () => {
+            const run = async () => {
+                fns.splice(fns.indexOf(run), 1);
+                running++;
+                clearTimeout(timeout);
+                resolve(await fn());
+                running--;
+                if (fns.length > 0) fns[0]();
+            };
+            const timeout = setTimeout(run, shift);
+
+            if (running < maxConcurrent) run();
+            else fns.push(run);
+        });
+
+        checks.push(...await Promise.all(server.services.map((service, i) => limit(i * 100, async () => {
 
             if (service.type === "server")
                 return { serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error };
@@ -131,11 +147,14 @@ const checkServices = async () => {
         }
     }
 
+    const checkDuration = Math.round((Date.now() - currentDate) / 100) / 10;
+
     if (offlineAlerts.length > 0) {
         await alert({
             title: `Service${offlineAlerts.length > 1 ? "s" : ""} Hors Ligne`,
             description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
+            footer: { text: "Services vérifiés en " + checkDuration + "s" },
             color: "16711680"
         });
     }
@@ -148,11 +167,12 @@ const checkServices = async () => {
                 ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
             ].join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
+            footer: { text: "Services vérifiés en " + checkDuration + "s" },
             color: "65280"
         });
     }
 
-    console.log("Vérification des statuts des services terminée !");
+    console.log("Vérification des statuts des services terminée en " + checkDuration + "s.");
 };
 
 const getLastStatus = async (service) => {
