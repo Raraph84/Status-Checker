@@ -41,7 +41,7 @@ const checkServices = async () => {
 
     let services;
     try {
-        [services] = await database.query("SELECT * FROM services WHERE !disabled");
+        [services] = await database.query("SELECT * FROM services");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -143,7 +143,7 @@ const checkServices = async () => {
         } else {
             const alreadyOffline = await serviceOffline(service, currentDate);
             if (!alreadyOffline) offlineAlerts.push({ ...service, error: check.error });
-            stillDown.push(service);
+            if (!service.disabled) stillDown.push(service);
         }
     }
 
@@ -203,13 +203,16 @@ const serviceOnline = async (service, responseTime, currentDate) => {
         }
     }
 
-    try {
-        await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-    }
+    if (!service.disabled) {
 
-    await updateDailyStatuses(service, currentDate);
+        try {
+            await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime]);
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+        }
+
+        await updateDailyStatuses(service, currentDate);
+    }
 
     return alreadyOnline;
 };
@@ -229,13 +232,16 @@ const serviceOffline = async (service, currentDate) => {
         }
     }
 
-    try {
-        await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-    }
+    if (!service.disabled) {
 
-    await updateDailyStatuses(service, currentDate);
+        try {
+            await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+        }
+
+        await updateDailyStatuses(service, currentDate);
+    }
 
     return alreadyOffline;
 };
