@@ -273,7 +273,7 @@ const updateDailyStatuses = async (service, currentDate) => {
     }
 
     const onlineStatuses = statuses.filter((status) => status.online);
-    const uptime = statuses.length > 0 ? Math.round(onlineStatuses.length / statuses.length * 100 * 100) / 100 : null;
+    const uptime = statuses.length > 0 ? Math.round(onlineStatuses.length / statuses.length * 100 * 1000) / 1000 : null;
     const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length) : null;
 
     try {
