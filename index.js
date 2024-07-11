@@ -51,20 +51,34 @@ const checkServices = async () => {
     const checks = [];
 
     for (const service of services) {
-        let domain;
-        if (service.type === "server") domain = service.host;
-        else if (service.type === "minecraft") domain = service.host.split(/:/)[0];
-        else domain = service.host.split(/:\/\/|:|\//)[1];
+
+        let host;
+        if (service.type === "server") host = service.host;
+        else if (service.type === "minecraft") host = service.host.split(/:/)[0];
+        else host = service.host.split(/:\/\/|:|\//)[1];
+
         let serverIp;
-        if (isIP(domain)) serverIp = domain;
+        if (isIP(host)) serverIp = host;
         else {
+
+            if (service.type === "minecraft") {
+                let results;
+                try {
+                    results = await dns.resolveSrv("_minecraft._tcp." + host);
+                } catch (error) {
+                }
+                if (results && results[0])
+                    host = results[0].name;
+            }
+
             try {
-                serverIp = (await dns.lookup(domain)).address;
+                serverIp = (await dns.lookup(host)).address;
             } catch (error) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 continue;
             }
         }
+
         const server = servers.find((server) => server.ip === serverIp);
         if (!server) servers.push({ ip: serverIp, services: [service], ping: null });
         else server.services.push(service);
@@ -83,7 +97,7 @@ const checkServices = async () => {
         server.ping = { online: true, responseTime, error: null };
     }));
 
-    for (const server of servers) {
+    await Promise.all(servers.map(async (server) => {
 
         const maxConcurrent = Math.max(5, Math.ceil(10 * server.services.length / 60));
         const fns = [];
@@ -104,10 +118,12 @@ const checkServices = async () => {
             else fns.push(run);
         });
 
-        checks.push(...await Promise.all(server.services.map((service, i) => limit(i * 100, async () => {
+        await Promise.all(server.services.map((service, i) => limit(i * 100, async () => {
 
-            if (service.type === "server")
-                return { serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error };
+            if (service.type === "server") {
+                checks.push({ serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error });
+                return;
+            }
 
             //if (server.ping && !server.ping.online)
             //    return { serviceId: service.service_id, online: false, error: server.ping.error };
@@ -120,12 +136,13 @@ const checkServices = async () => {
                 else if (service.type === "gateway") responseTime = await checkWs(service.host);
                 else if (service.type === "bot") await checkBot(service.host);
             } catch (error) {
-                return { serviceId: service.service_id, online: false, error };
+                checks.push({ serviceId: service.service_id, online: false, error });
+                return;
             }
 
-            return { serviceId: service.service_id, online: true, responseTime };
-        }))));
-    }
+            checks.push({ serviceId: service.service_id, online: true, responseTime });
+        })));
+    }));
 
     checks.filter((check) => check.error).forEach((check) => check.error = check.error instanceof AggregateError ? check.error.errors.map((error) => error.toString()).join(" - ") : check.error.toString());
 
@@ -136,25 +153,28 @@ const checkServices = async () => {
     for (const service of services) {
 
         const check = checks.find((check) => check.serviceId === service.service_id);
+        if (!check) throw new Error("Service " + service.service_id + " not checked.");
 
         if (check.online) {
-            const alreadyOnline = await serviceOnline(service, check.responseTime, currentDate);
+            const alreadyOnline = await serviceOnline(service, check.responseTime, currentMinute);
             if (!alreadyOnline) onlineAlerts.push(service);
         } else {
-            const alreadyOffline = await serviceOffline(service, currentDate);
+            const alreadyOffline = await serviceOffline(service, currentMinute);
             if (!alreadyOffline) offlineAlerts.push({ ...service, error: check.error });
             if (!service.disabled) stillDown.push(service);
         }
+
+        await updateDailyStatuses(service, currentDate);
     }
 
-    const checkDuration = Math.round((Date.now() - currentDate) / 100) / 10;
+    const checkDuration = (Date.now() - currentDate) / 1000;
 
     if (offlineAlerts.length > 0) {
         await alert({
             title: `Service${offlineAlerts.length > 1 ? "s" : ""} Hors Ligne`,
             description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
-            footer: { text: "Services vérifiés en " + checkDuration + "s" },
+            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
             color: "16711680"
         });
     }
@@ -167,12 +187,12 @@ const checkServices = async () => {
                 ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
             ].join("\n"),
             timestamp: new Date(currentMinute * 1000 * 60),
-            footer: { text: "Services vérifiés en " + checkDuration + "s" },
+            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
             color: "65280"
         });
     }
 
-    console.log("Vérification des statuts des services terminée en " + checkDuration + "s.");
+    console.log("Vérification des statuts des services terminée en " + checkDuration.toFixed(1) + "s.");
 };
 
 const getLastStatus = async (service) => {
@@ -188,14 +208,11 @@ const getLastStatus = async (service) => {
     return !!lastEvent?.online || false;
 };
 
-const serviceOnline = async (service, responseTime, currentDate) => {
-
-    const currentMinute = Math.floor(currentDate / 1000 / 60);
+const serviceOnline = async (service, responseTime, currentMinute) => {
 
     const alreadyOnline = await getLastStatus(service);
 
     if (!alreadyOnline) {
-
         try {
             await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 1)", [service.service_id, currentMinute]);
         } catch (error) {
@@ -204,27 +221,21 @@ const serviceOnline = async (service, responseTime, currentDate) => {
     }
 
     if (!service.disabled) {
-
         try {
             await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
-
-        await updateDailyStatuses(service, currentDate);
     }
 
     return alreadyOnline;
 };
 
-const serviceOffline = async (service, currentDate) => {
-
-    const currentMinute = Math.floor(currentDate / 1000 / 60);
+const serviceOffline = async (service, currentMinute) => {
 
     const alreadyOffline = !await getLastStatus(service);
 
     if (!alreadyOffline) {
-
         try {
             await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
         } catch (error) {
@@ -233,14 +244,11 @@ const serviceOffline = async (service, currentDate) => {
     }
 
     if (!service.disabled) {
-
         try {
             await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
-
-        await updateDailyStatuses(service, currentDate);
     }
 
     return alreadyOffline;
@@ -272,13 +280,16 @@ const updateDailyStatuses = async (service, currentDate) => {
         return;
     }
 
+    if (statuses.length === 0)
+        return;
+
     const onlineStatuses = statuses.filter((status) => status.online);
-    const uptime = statuses.length > 0 ? Math.round(onlineStatuses.length / statuses.length * 100 * 1000) / 1000 : null;
+    const uptime = Math.round(onlineStatuses.length / statuses.length * 100 * 1000) / 1000;
     const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length) : null;
 
     try {
         await database.query("INSERT INTO services_daily_statuses (service_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?)", [service.service_id, day, statuses.length, uptime, responseTime]);
-        await database.query("DELETE FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [service.service_id, firstMinute, lastMinute]);
+        await database.query("DELETE FROM services_statuses WHERE service_id=? && minute<?", [service.service_id, firstMinute, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
