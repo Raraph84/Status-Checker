@@ -11,17 +11,34 @@ const tasks = new TaskManager();
 
 const database = createPool({ password: process.env.DATABASE_PASSWORD, charset: "utf8mb4_general_ci", ...config.database });
 tasks.addTask(async (resolve, reject) => {
-    console.log("Connexion à la base de données...");
+    console.log("Connecting to the database...");
     try {
         await database.query("SELECT 1");
     } catch (error) {
-        console.log("Impossible de se connecter à la base de données - " + error);
+        console.log("Cannot connect to the database - " + error);
         reject();
         return;
     }
-    console.log("Connecté à la base de données !");
+    console.log("Connected to the database.");
     resolve();
 }, (resolve) => database.end().then(() => resolve()));
+
+let checker;
+tasks.addTask(async (resolve, reject) => {
+    try {
+        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        reject();
+        return;
+    }
+    if (!checker) {
+        console.log("Checker does not exist.");
+        reject();
+        return;
+    }
+    resolve();
+}, (resolve) => resolve());
 
 let checkerInterval;
 tasks.addTask((resolve) => {
@@ -34,14 +51,14 @@ tasks.run();
 
 const checkServices = async () => {
 
-    console.log("Vérification des statuts des services...");
+    console.log("Checking services statuses...");
 
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
     let services;
     try {
-        [services] = await database.query("SELECT * FROM services");
+        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=?", [checker.checker_id]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -72,7 +89,7 @@ const checkServices = async () => {
             }
 
             try {
-                serverIp = (await dns.lookup(host)).address;
+                serverIp = (await dns.lookup(host, { family: 4 })).address;
             } catch (error) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 continue;
@@ -80,26 +97,12 @@ const checkServices = async () => {
         }
 
         const server = servers.find((server) => server.ip === serverIp);
-        if (!server) servers.push({ ip: serverIp, services: [service], ping: null });
+        if (!server) servers.push({ ip: serverIp, services: [service] });
         else server.services.push(service);
     }
 
-    await Promise.all(servers.filter((server) => server.services.some((service) => service.type === "server")).map(async (server) => {
-
-        let responseTime = null;
-        try {
-            responseTime = await checkServer(server.ip);
-        } catch (error) {
-            server.ping = { online: false, responseTime, error };
-            return;
-        }
-
-        server.ping = { online: true, responseTime, error: null };
-    }));
-
     await Promise.all(servers.map(async (server) => {
 
-        const maxConcurrent = Math.max(5, Math.ceil(10 * server.services.length / 60));
         const fns = [];
         let running = 0;
         const limit = (shift, fn) => new Promise((resolve) => {
@@ -114,19 +117,11 @@ const checkServices = async () => {
             };
             const timeout = setTimeout(run, shift);
 
-            if (running < maxConcurrent) run();
+            if (running < 5) run();
             else fns.push(run);
         });
 
         await Promise.all(server.services.map((service, i) => limit(i * 100, async () => {
-
-            if (service.type === "server") {
-                checks.push({ serviceId: service.service_id, online: server.ping.online, responseTime: server.ping.responseTime, error: server.ping.error });
-                return;
-            }
-
-            //if (server.ping && !server.ping.online)
-            //    return { serviceId: service.service_id, online: false, error: server.ping.error };
 
             let responseTime = null;
             try {
@@ -135,6 +130,7 @@ const checkServices = async () => {
                 else if (service.type === "api") responseTime = await checkApi(service.host);
                 else if (service.type === "gateway") responseTime = await checkWs(service.host);
                 else if (service.type === "bot") await checkBot(service.host);
+                else if (service.type === "server") responseTime = await checkServer(server.ip);
             } catch (error) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 return;
@@ -171,35 +167,41 @@ const checkServices = async () => {
 
     if (offlineAlerts.length > 0) {
         await alert({
-            title: `Service${offlineAlerts.length > 1 ? "s" : ""} Hors Ligne`,
-            description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
-            timestamp: new Date(currentMinute * 1000 * 60),
-            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-            color: "16711680"
+            content: `@everyone **Services hors ligne** pour ${checker.name} ${checker.location}`,
+            embeds: [{
+                title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
+                description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
+                timestamp: new Date(currentMinute * 1000 * 60),
+                footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+                color: "16711680"
+            }]
         });
     }
 
     if (onlineAlerts.length > 0) {
         await alert({
-            title: `Service${onlineAlerts.length > 1 ? "s" : ""} En Ligne`,
-            description: [
-                ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
-                ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
-            ].join("\n"),
-            timestamp: new Date(currentMinute * 1000 * 60),
-            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-            color: "65280"
+            content: `@everyone **Services en ligne** pour ${checker.name} ${checker.location}`,
+            embeds: [{
+                title: `Services En Ligne pour ${checker.name} ${checker.location}`,
+                description: [
+                    ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
+                    ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
+                ].join("\n"),
+                timestamp: new Date(currentMinute * 1000 * 60),
+                footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+                color: "65280"
+            }]
         });
     }
 
-    console.log("Vérification des statuts des services terminée en " + checkDuration.toFixed(1) + "s.");
+    console.log("Services statuses checked in " + checkDuration.toFixed(1) + "s.");
 };
 
 const getLastStatus = async (service) => {
 
     let lastEvent;
     try {
-        [lastEvent] = await database.query("SELECT * FROM services_events WHERE service_id=? ORDER BY minute DESC LIMIT 1", [service.service_id]);
+        [lastEvent] = await database.query("SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1", [service.service_id, checker.checker_id]);
         lastEvent = lastEvent[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
@@ -214,7 +216,7 @@ const serviceOnline = async (service, responseTime, currentMinute) => {
 
     if (!alreadyOnline) {
         try {
-            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 1)", [service.service_id, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 1)", [service.service_id, checker.checker_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -222,7 +224,7 @@ const serviceOnline = async (service, responseTime, currentMinute) => {
 
     if (!service.disabled) {
         try {
-            await database.query("INSERT INTO services_statuses (service_id, minute, online, response_time) VALUES (?, ?, 1, ?)", [service.service_id, currentMinute, responseTime]);
+            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online, response_time) VALUES (?, ?, ?, 1, ?)", [service.service_id, checker.checker_id, currentMinute, responseTime]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -237,7 +239,7 @@ const serviceOffline = async (service, currentMinute) => {
 
     if (!alreadyOffline) {
         try {
-            await database.query("INSERT INTO services_events (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, checker.checker_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -245,7 +247,7 @@ const serviceOffline = async (service, currentMinute) => {
 
     if (!service.disabled) {
         try {
-            await database.query("INSERT INTO services_statuses (service_id, minute, online) VALUES (?, ?, 0)", [service.service_id, currentMinute]);
+            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, checker.checker_id, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -262,7 +264,7 @@ const updateDailyStatuses = async (service, currentDate) => {
 
     let lastDailyStatus;
     try {
-        [lastDailyStatus] = await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? ORDER BY day DESC LIMIT 1", [service.service_id]);
+        [lastDailyStatus] = await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1", [service.service_id, checker.checker_id]);
         lastDailyStatus = lastDailyStatus[0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
@@ -274,7 +276,7 @@ const updateDailyStatuses = async (service, currentDate) => {
 
     let statuses;
     try {
-        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && minute>=? && minute<?", [service.service_id, firstMinute, lastMinute]);
+        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && checker_id=? && minute>=? && minute<?", [service.service_id, checker.checker_id, firstMinute, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -288,11 +290,11 @@ const updateDailyStatuses = async (service, currentDate) => {
     const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length) : null;
 
     try {
-        await database.query("INSERT INTO services_daily_statuses (service_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?)", [service.service_id, day, statuses.length, uptime, responseTime]);
-        await database.query("DELETE FROM services_statuses WHERE service_id=? && minute<?", [service.service_id, lastMinute]);
+        await database.query("INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)", [service.service_id, checker.checker_id, day, statuses.length, uptime, responseTime]);
+        await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [service.service_id, checker.checker_id, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 };
 
-const alert = (embed) => fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "@everyone", embeds: [embed] }) });
+const alert = (message) => fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(message) });

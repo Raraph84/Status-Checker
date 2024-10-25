@@ -3,5 +3,6 @@
         "host": "localhost",
         "user": "Status_Checker",
         "database": "Status"
-    }
+    },
+    "checkerId": 2
 }

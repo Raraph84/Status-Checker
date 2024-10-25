@@ -6,6 +6,12 @@ const Ws = require("ws");
 
 const checkServer = (host) => new Promise((resolve, reject) => {
 
+    if (process.platform !== "linux") {
+        console.log("Ping check is not supported on this platform");
+        resolve(0);
+        return;
+    }
+
     const proc = spawn("ping", ["-n", "-W", "2", "-w", "2", "-c", "1", host]);
 
     let output = "";

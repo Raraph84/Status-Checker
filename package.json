@@ -9,9 +9,10 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "minecraft-ping-js": "^1.0.2",
-    "mysql2": "^3.10.1",
+    "mysql2": "^3.11.3",
     "raraph84-lib": "^2.19.0",
+    "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "ws": "^8.17.1"
+    "ws": "^8.18.0"
   }
 }
