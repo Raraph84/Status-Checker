@@ -3,7 +3,7 @@ const { isIP } = require("net");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./src/checkers");
-const { limits, alert } = require("./src/utils");
+const { limits, alert, splitEmbed } = require("./src/utils");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -149,37 +149,35 @@ const checkServices = async () => {
     const checkDuration = (Date.now() - currentDate) / 1000;
 
     if (offlineAlerts.length > 0) {
+        const embeds = splitEmbed({
+            title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
+            description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
+            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+            timestamp: new Date(currentMinute * 1000 * 60),
+            color: 0xFF0000.toString()
+        });
         try {
-            await alert({
-                content: `@everyone **Services hors ligne** pour ${checker.name} ${checker.location}`,
-                embeds: [{
-                    title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
-                    description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
-                    timestamp: new Date(currentMinute * 1000 * 60),
-                    footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-                    color: "16711680"
-                }]
-            });
+            await alert({ content: `@everyone **${offlineAlerts.length} Services hors ligne** pour ${checker.name} ${checker.location}` });
+            for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
         }
     }
 
     if (onlineAlerts.length > 0) {
+        const embeds = splitEmbed({
+            title: `Services En Ligne pour ${checker.name} ${checker.location}`,
+            description: [
+                ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
+                ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
+            ].join("\n"),
+            footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+            timestamp: new Date(currentMinute * 1000 * 60),
+            color: 0x00FF00.toString()
+        });
         try {
-            await alert({
-                content: `@everyone **Services en ligne** pour ${checker.name} ${checker.location}`,
-                embeds: [{
-                    title: `Services En Ligne pour ${checker.name} ${checker.location}`,
-                    description: [
-                        ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
-                        ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
-                    ].join("\n"),
-                    timestamp: new Date(currentMinute * 1000 * 60),
-                    footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-                    color: "65280"
-                }]
-            });
+            await alert({ content: `@everyone **${onlineAlerts.length} Services en ligne** pour ${checker.name} ${checker.location}` });
+            for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
         }

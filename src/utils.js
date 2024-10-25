@@ -22,6 +22,27 @@ const limits = (maxConcurrent) => {
     return limit;
 };
 
+const splitEmbed = (embed) => {
+
+    const lines = embed.description.split("\n").map((line) => line = line.length > 4096 ? line.slice(0, 4093) + "..." : line);
+
+    const descriptions = [[]];
+    for (const line of lines) {
+        const description = descriptions[descriptions.length - 1];
+        if (description.concat(line).join("\n").length > 4096) descriptions.push([line]);
+        else description.push(line);
+    }
+
+    const embeds = [];
+    for (const description of descriptions) embeds.push({ description: description.join("\n"), color: embed.color });
+
+    embeds[0].title = embed.title;
+    embeds[embeds.length - 1].timestamp = embed.timestamp;
+    embeds[embeds.length - 1].footer = embed.footer;
+
+    return embeds;
+};
+
 const alert = (message) => new Promise((resolve, reject) => {
     fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, {
         method: "POST",
@@ -33,4 +54,4 @@ const alert = (message) => new Promise((resolve, reject) => {
     }).catch((error) => reject(error.toString()));
 });
 
-module.exports = { limits, alert };
+module.exports = { limits, alert, splitEmbed };
