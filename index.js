@@ -149,32 +149,40 @@ const checkServices = async () => {
     const checkDuration = (Date.now() - currentDate) / 1000;
 
     if (offlineAlerts.length > 0) {
-        await alert({
-            content: `@everyone **Services hors ligne** pour ${checker.name} ${checker.location}`,
-            embeds: [{
-                title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
-                description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
-                timestamp: new Date(currentMinute * 1000 * 60),
-                footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-                color: "16711680"
-            }]
-        });
+        try {
+            await alert({
+                content: `@everyone **Services hors ligne** pour ${checker.name} ${checker.location}`,
+                embeds: [{
+                    title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
+                    description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
+                    timestamp: new Date(currentMinute * 1000 * 60),
+                    footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+                    color: "16711680"
+                }]
+            });
+        } catch (error) {
+            console.log("Cannot send alert - " + error);
+        }
     }
 
     if (onlineAlerts.length > 0) {
-        await alert({
-            content: `@everyone **Services en ligne** pour ${checker.name} ${checker.location}`,
-            embeds: [{
-                title: `Services En Ligne pour ${checker.name} ${checker.location}`,
-                description: [
-                    ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
-                    ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
-                ].join("\n"),
-                timestamp: new Date(currentMinute * 1000 * 60),
-                footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
-                color: "65280"
-            }]
-        });
+        try {
+            await alert({
+                content: `@everyone **Services en ligne** pour ${checker.name} ${checker.location}`,
+                embeds: [{
+                    title: `Services En Ligne pour ${checker.name} ${checker.location}`,
+                    description: [
+                        ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
+                        ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
+                    ].join("\n"),
+                    timestamp: new Date(currentMinute * 1000 * 60),
+                    footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
+                    color: "65280"
+                }]
+            });
+        } catch (error) {
+            console.log("Cannot send alert - " + error);
+        }
     }
 
     console.log(new Date(), "Services statuses checked in " + checkDuration.toFixed(1) + "s.");

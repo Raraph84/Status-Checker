@@ -22,6 +22,15 @@ const limits = (maxConcurrent) => {
     return limit;
 };
 
-const alert = (message) => fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(message) });
+const alert = (message) => new Promise((resolve, reject) => {
+    fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message)
+    }).then((res) => {
+        if (res.ok) resolve();
+        else res.text().then((text) => reject(text));
+    }).catch((error) => reject(error.toString()));
+});
 
 module.exports = { limits, alert };
