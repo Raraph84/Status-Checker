@@ -2,7 +2,8 @@ const { promises: dns } = require("dns");
 const { isIP } = require("net");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
-const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
+const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./src/checkers");
+const { limits, alert } = require("./src/utils");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -102,25 +103,7 @@ const checkServices = async () => {
     }
 
     await Promise.all(servers.map(async (server) => {
-
-        const fns = [];
-        let running = 0;
-        const limit = (shift, fn) => new Promise((resolve) => {
-
-            const run = async () => {
-                fns.splice(fns.indexOf(run), 1);
-                running++;
-                clearTimeout(timeout);
-                resolve(await fn());
-                running--;
-                if (fns.length > 0) fns[0]();
-            };
-            const timeout = setTimeout(run, shift);
-
-            if (running < 5) run();
-            else fns.push(run);
-        });
-
+        const limit = limits(5);
         await Promise.all(server.services.map((service, i) => limit(i * 100, async () => {
 
             let responseTime = null;
@@ -296,5 +279,3 @@ const updateDailyStatuses = async (service, currentDate) => {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 };
-
-const alert = (message) => fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(message) });
