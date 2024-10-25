@@ -1,6 +1,4 @@
-/node_modules
-/package-lock.json
-/deploy.bat
-/config.dev.json
-/.env
-/.env.local
+node_modules/
+config.dev.json
+.env
+.env.local
