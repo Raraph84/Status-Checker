@@ -52,7 +52,7 @@ tasks.run();
 
 const checkServices = async () => {
 
-    console.log("Checking services statuses...");
+    console.log(new Date(), "Checking services statuses...");
 
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
@@ -177,15 +177,14 @@ const checkServices = async () => {
         });
     }
 
-    console.log("Services statuses checked in " + checkDuration.toFixed(1) + "s.");
+    console.log(new Date(), "Services statuses checked in " + checkDuration.toFixed(1) + "s.");
 };
 
 const getLastStatus = async (service) => {
 
     let lastEvent;
     try {
-        [lastEvent] = await database.query("SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1", [service.service_id, checker.checker_id]);
-        lastEvent = lastEvent[0];
+        lastEvent = (await database.query("SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1", [service.service_id, checker.checker_id]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
@@ -247,8 +246,7 @@ const updateDailyStatuses = async (service, currentDate) => {
 
     let lastDailyStatus;
     try {
-        [lastDailyStatus] = await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1", [service.service_id, checker.checker_id]);
-        lastDailyStatus = lastDailyStatus[0];
+        lastDailyStatus = (await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1", [service.service_id, checker.checker_id]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
