@@ -150,14 +150,14 @@ const checkServices = async () => {
 
     if (offlineAlerts.length > 0) {
         const embeds = splitEmbed({
-            title: `Services Hors Ligne pour ${checker.name} ${checker.location}`,
+            title: `Services hors ligne pour ${checker.name} ${checker.location}`,
             description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
             footer: { text: "Services vérifiés en " + checkDuration.toFixed(1) + "s" },
             timestamp: new Date(currentMinute * 1000 * 60),
             color: 0xFF0000.toString()
         });
         try {
-            await alert({ content: `@everyone **${offlineAlerts.length} Services hors ligne** pour ${checker.name} ${checker.location}` });
+            await alert({ content: `@everyone **${offlineAlerts.length} Service${offlineAlerts.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}` });
             for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
@@ -166,7 +166,7 @@ const checkServices = async () => {
 
     if (onlineAlerts.length > 0) {
         const embeds = splitEmbed({
-            title: `Services En Ligne pour ${checker.name} ${checker.location}`,
+            title: `Services en ligne pour ${checker.name} ${checker.location}`,
             description: [
                 ...onlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est de nouveau en ligne.**`),
                 ...(stillDown.length > 0 ? ["**Les services toujours hors ligne sont : " + stillDown.map((service) => `**\`${service.name}\`**`).join(", ") + ".**"] : [])
@@ -176,7 +176,7 @@ const checkServices = async () => {
             color: 0x00FF00.toString()
         });
         try {
-            await alert({ content: `@everyone **${onlineAlerts.length} Services en ligne** pour ${checker.name} ${checker.location}` });
+            await alert({ content: `@everyone **${onlineAlerts.length} Service${onlineAlerts.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}` });
             for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
