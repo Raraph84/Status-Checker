@@ -278,7 +278,7 @@ const updateDailyStatuses = async (service, currentDate) => {
 
     try {
         await database.query("INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)", [service.service_id, checker.checker_id, day, statuses.length, uptime, responseTime]);
-        await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [service.service_id, checker.checker_id, lastMinute]);
+        await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [service.service_id, checker.checker_id, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
