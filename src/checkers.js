@@ -41,9 +41,9 @@ const checkWebsite = (host) => new Promise((resolve, reject) => {
     let responseDate = 0;
 
     const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
-    req.on("finish", () => finishDate = Date.now());
+    req.on("finish", () => finishDate = process.hrtime.bigint());
     req.on("response", (res) => {
-        responseDate = Date.now();
+        responseDate = process.hrtime.bigint();
         res.on("data", () => { });
         res.on("end", () => {
 
@@ -52,7 +52,7 @@ const checkWebsite = (host) => new Promise((resolve, reject) => {
                 return;
             }
 
-            resolve(responseDate - finishDate);
+            resolve(Number(responseDate - finishDate) / 1000000);
         });
     });
     req.on("error", (error) => reject(error));
@@ -67,9 +67,9 @@ const checkApi = (host) => new Promise((resolve, reject) => {
     let responseDate = 0;
 
     const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
-    req.on("finish", () => finishDate = Date.now());
+    req.on("finish", () => finishDate = process.hrtime.bigint());
     req.on("response", (res) => {
-        responseDate = Date.now();
+        responseDate = process.hrtime.bigint();
         let data = "";
         res.on("data", (chunk) => data += chunk);
         res.on("end", () => {
@@ -81,7 +81,7 @@ const checkApi = (host) => new Promise((resolve, reject) => {
                 return;
             }
 
-            resolve(responseDate - finishDate);
+            resolve(Number(responseDate - finishDate) / 1000000);
         });
     });
     req.on("error", (error) => reject(error));
@@ -97,17 +97,16 @@ const checkWs = (host) => new Promise((resolve, reject) => {
     const ws = new Ws(host);
 
     ws.on("open", () => {
-        openTime = Date.now();
+        openTime = process.hrtime.bigint();
         ws.send("");
     });
 
     ws.on("close", () => {
-        if (openTime > 0) resolve(Date.now() - openTime);
+        const endTime = process.hrtime.bigint();
+        if (openTime > 0) resolve(Number(endTime - openTime) / 1000000);
     });
 
-    ws.on("error", (error) => {
-        reject(error);
-    });
+    ws.on("error", (error) => reject(error));
 
     setTimeout(() => reject(new Error("timeout")), 10000);
 });

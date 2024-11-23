@@ -119,6 +119,8 @@ const checkServices = async () => {
                 return;
             }
 
+            responseTime = responseTime ? Math.round(responseTime * 10) / 10 : responseTime;
+
             checks.push({ serviceId: service.service_id, online: true, responseTime });
         })));
     }));
@@ -274,7 +276,7 @@ const updateDailyStatuses = async (service, currentDate) => {
 
     const onlineStatuses = statuses.filter((status) => status.online);
     const uptime = Math.round(onlineStatuses.length / statuses.length * 100 * 1000) / 1000;
-    const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length) : null;
+    const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length * 10) / 10 : null;
 
     try {
         await database.query("INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)", [service.service_id, checker.checker_id, day, statuses.length, uptime, responseTime]);
