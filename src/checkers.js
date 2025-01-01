@@ -1,39 +1,48 @@
-const { spawn } = require("child_process");
+const { isIPv6 } = require("net");
 const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
 const Ws = require("ws");
+const ping = require("net-ping");
 
-const checkServer = (host) => new Promise((resolve, reject) => {
+const pingSessions = [];
 
-    if (process.platform !== "linux") {
-        console.log("Ping check is not supported on this platform");
-        resolve(0);
-        return;
-    }
-
-    const proc = spawn("ping", ["-n", "-W", "2", "-w", "2", "-c", "1", host]);
-
-    let output = "";
-    proc.stdout.on("data", (data) => output += data);
-    proc.stderr.on("data", (data) => output += data);
-
-    proc.on("error", (error) => reject(error));
-    proc.on("close", () => {
-
-        const lines = output.split("\n");
-
-        for (const line of lines) {
-
-            if (!line.startsWith("64 bytes from")) continue;
-
-            resolve(parseFloat(line.split("time=")[1].split(" ")[0]));
-            return;
-        }
-
-        reject(new Error("Ping timed out"));
+const processPing = (session, host) => new Promise((resolve, reject) => {
+    session.pingHost(host, (error, target, sent, rcvd) => {
+        if (error) reject(error);
+        else resolve(Number(rcvd - sent) / 1000);
     });
 });
+
+const checkServer = async (host) => {
+
+    let sessionId = process.pid;
+    while (pingSessions.includes(sessionId % 65535)) sessionId++;
+    sessionId %= 65535;
+    pingSessions.push(sessionId);
+
+    const session = ping.createSession({
+        sessionId,
+        networkProtocol: isIPv6(host) ? ping.NetworkProtocol.IPv6 : ping.NetworkProtocol.IPv4,
+        timeout: 1000,
+        packetSize: 64,
+        ttl: 64,
+        retries: 0
+    });
+
+    let res = null;
+    try {
+        res = await processPing(session, host);
+    } catch (error) {
+    }
+
+    if (res === null) res = await processPing(session, host); // Retry once with error
+
+    session.close();
+    pingSessions.splice(pingSessions.indexOf(sessionId), 1);
+
+    return res;
+};
 
 const checkWebsite = (host) => new Promise((resolve, reject) => {
 
