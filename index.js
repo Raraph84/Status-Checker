@@ -52,7 +52,7 @@ tasks.run();
 
 const checkServices = async () => {
 
-    console.log(new Date(), "Checking services statuses...");
+    console.log("Checking services statuses...");
 
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
@@ -185,7 +185,7 @@ const checkServices = async () => {
         }
     }
 
-    console.log(new Date(), "Services statuses checked in " + checkDuration.toFixed(1) + "s.");
+    console.log("Services statuses checked in " + checkDuration.toFixed(1) + "s.");
 };
 
 const getLastStatus = async (service) => {
