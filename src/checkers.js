@@ -33,14 +33,22 @@ const checkServer = async (host) => {
     let res = null;
     try {
         res = await processPing(session, host);
-    } catch (error) {
+    } catch (e) {
     }
 
-    if (res === null) res = await processPing(session, host); // Retry once with error
+    let error = null;
+    if (res === null) { // Retry once with error
+        try {
+            res = await processPing(session, host);
+        } catch (e) {
+            error = e;
+        }
+    }
 
     session.close();
-    pingSessions.splice(pingSessions.indexOf(sessionId), 1);
+    setTimeout(() => pingSessions.splice(pingSessions.indexOf(sessionId), 1), 30 * 1000);
 
+    if (error) throw error;
     return res;
 };
 
