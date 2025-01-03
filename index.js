@@ -43,8 +43,13 @@ tasks.addTask(async (resolve, reject) => {
 
 let checkerInterval;
 tasks.addTask((resolve) => {
-    checkServices();
-    checkerInterval = setInterval(() => checkServices(), 60 * 1000);
+    let lastMinute = -1;
+    checkerInterval = setInterval(() => {
+        const date = new Date();
+        if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
+        lastMinute = date.getMinutes();
+        checkServices();
+    }, 500);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
 
