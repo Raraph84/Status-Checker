@@ -78,7 +78,7 @@ const checkServices = async () => {
         let host;
         if (service.type === "server") host = service.host;
         else if (service.type === "minecraft") host = service.host.split(/:/)[0];
-        else host = service.host.split(/:\/\/|:|\//)[1];
+        else host = new URL(service.host).hostname.replace(/^\[|]$/g, "");
 
         let serverIp;
         if (isIP(host)) serverIp = host;
