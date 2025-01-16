@@ -58,7 +58,10 @@ const checkWebsite = (host) => new Promise((resolve, reject) => {
     let responseDate = 0;
 
     const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
-    req.on("finish", () => finishDate = process.hrtime.bigint());
+    req.on("socket", (socket) => {
+        socket.on("connect", () => finishDate = process.hrtime.bigint());
+        socket.on("secureConnect", () => finishDate = process.hrtime.bigint());
+    });
     req.on("response", (res) => {
         responseDate = process.hrtime.bigint();
         res.on("data", () => { });
@@ -84,7 +87,10 @@ const checkApi = (host) => new Promise((resolve, reject) => {
     let responseDate = 0;
 
     const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
-    req.on("finish", () => finishDate = process.hrtime.bigint());
+    req.on("socket", (socket) => {
+        socket.on("connect", () => finishDate = process.hrtime.bigint());
+        socket.on("secureConnect", () => finishDate = process.hrtime.bigint());
+    });
     req.on("response", (res) => {
         responseDate = process.hrtime.bigint();
         let data = "";
