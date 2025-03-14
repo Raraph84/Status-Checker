@@ -7,13 +7,6 @@ const ping = require("net-ping");
 
 const pingSessions = [];
 
-const processPing = (session, host) => new Promise((resolve, reject) => {
-    session.pingHost(host, (error, target, sent, rcvd) => {
-        if (error) reject(error);
-        else resolve(Number(rcvd - sent) / 1000);
-    });
-});
-
 const checkServer = async (host) => {
 
     let sessionId = process.pid;
@@ -27,22 +20,20 @@ const checkServer = async (host) => {
         timeout: 1000,
         packetSize: 64,
         ttl: 64,
-        retries: 0
+        retries: 4
     });
 
     let res = null;
-    try {
-        res = await processPing(session, host);
-    } catch (e) {
-    }
-
     let error = null;
-    if (res === null) { // Retry once with error
-        try {
-            res = await processPing(session, host);
-        } catch (e) {
-            error = e;
-        }
+    try {
+        res = await new Promise((resolve, reject) => {
+            session.pingHost(host, (error, target, sent, rcvd) => {
+                if (error) reject(error);
+                else resolve(Number(rcvd - sent) / 1000);
+            });
+        });
+    } catch (e) {
+        error = e;
     }
 
     session.close();
