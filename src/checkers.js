@@ -2,17 +2,13 @@ const { isIPv6 } = require("net");
 const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
+const { genPingSessionId, releasePingSessionId } = require("./utils");
 const Ws = require("ws");
 const ping = require("net-ping");
 
-const pingSessions = [];
-
 const checkServer = async (host) => {
 
-    let sessionId = process.pid;
-    while (pingSessions.includes(sessionId % 65535)) sessionId++;
-    sessionId %= 65535;
-    pingSessions.push(sessionId);
+    const sessionId = genPingSessionId();
 
     const session = ping.createSession({
         sessionId,
@@ -37,7 +33,7 @@ const checkServer = async (host) => {
     }
 
     session.close();
-    setTimeout(() => pingSessions.splice(pingSessions.indexOf(sessionId), 1), 30 * 1000);
+    releasePingSessionId(sessionId);
 
     if (error) throw error;
     return res;

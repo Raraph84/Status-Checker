@@ -54,4 +54,29 @@ const alert = (message) => new Promise((resolve, reject) => {
     }).catch((error) => reject(error.toString()));
 });
 
-module.exports = { limits, alert, splitEmbed };
+const pingSessions = [];
+const genPingSessionId = () => {
+    let sessionId = process.pid;
+    while (pingSessions.includes(sessionId % 65535)) sessionId++;
+    sessionId %= 65535;
+    pingSessions.push(sessionId);
+    return sessionId;
+};
+const releasePingSessionId = (sessionId) => setTimeout(() => pingSessions.splice(pingSessions.indexOf(sessionId), 1), 30 * 1000);
+
+const median = (values) => {
+
+    if (values.length === 0)
+        throw new Error("Input array is empty");
+
+    // Sorting values, preventing original array from being mutated.
+    values = [...values].sort((a, b) => a - b);
+
+    const half = Math.floor(values.length / 2);
+    return (values.length % 2
+        ? values[half]
+        : (values[half - 1] + values[half]) / 2
+    );
+}
+
+module.exports = { limits, alert, splitEmbed, genPingSessionId, releasePingSessionId, median };
