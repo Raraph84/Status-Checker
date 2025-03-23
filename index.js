@@ -1,10 +1,10 @@
 const { promises: dns } = require("dns");
-const { isIP } = require("net");
 const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./src/checkers");
 const { limits, alert, splitEmbed } = require("./src/utils");
 const { smokeping } = require("./src/smokeping");
+const net = require("net");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -83,10 +83,10 @@ const updateSmokepingServices = async () => {
     for (const service of services) {
 
         let serverIp;
-        if (isIP(service.host)) serverIp = service.host;
+        if (net.isIP(service.host)) serverIp = service.host;
         else {
             try {
-                serverIp = (await dns.lookup(service.host, { family: 4 })).address;
+                serverIp = (await dns.lookup(service.host, { family: service.protocol })).address;
             } catch (error) {
                 continue;
             }
@@ -123,8 +123,11 @@ const checkServices = async () => {
         else if (service.type === "minecraft") host = service.host.split(/:/)[0];
         else host = new URL(service.host).hostname.replace(/^\[|]$/g, "");
 
-        let serverIp;
-        if (isIP(host)) serverIp = host;
+        let ipv4 = null;
+        let ipv6 = null;
+
+        if (net.isIPv4(host)) ipv4 = host;
+        else if (net.isIPv6(host)) ipv6 = host;
         else {
 
             if (service.type === "minecraft") {
@@ -137,16 +140,18 @@ const checkServices = async () => {
                     host = results[0].name;
             }
 
-            try {
-                serverIp = (await dns.lookup(host, { family: 4 })).address;
-            } catch (error) {
+            let error;
+            await dns.lookup(host, { family: 6 }).then((res) => ipv6 = res.address).catch((e) => error = e);
+            await dns.lookup(host, { family: 4 }).then((res) => ipv4 = res.address).catch((e) => error = e);
+
+            if (!ipv4 && !ipv6) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 continue;
             }
         }
 
-        const server = servers.find((server) => server.ip === serverIp);
-        if (!server) servers.push({ ip: serverIp, services: [service] });
+        const server = servers.find((server) => server.ipv4 === ipv4 || server.ipv6 === ipv6);
+        if (!server) servers.push({ ipv4, ipv6, services: [service] });
         else server.services.push(service);
     }
 
@@ -161,7 +166,7 @@ const checkServices = async () => {
                 else if (service.type === "api") responseTime = await checkApi(service.host);
                 else if (service.type === "gateway") responseTime = await checkWs(service.host);
                 else if (service.type === "bot") await checkBot(service.host);
-                else if (service.type === "server") responseTime = await checkServer(server.ip);
+                else if (service.type === "server") responseTime = await checkServer({ 4: server.ipv4, 6: server.ipv6, 0: server.ipv6 ?? server.ipv4 }[service.protocol]);
             } catch (error) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 return;

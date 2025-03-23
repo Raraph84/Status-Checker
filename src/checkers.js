@@ -1,9 +1,9 @@
-const { isIPv6 } = require("net");
 const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
 const { genPingSessionId, releasePingSessionId } = require("./utils");
 const Ws = require("ws");
+const net = require("net");
 const ping = require("net-ping");
 
 const checkServer = async (host) => {
@@ -12,7 +12,7 @@ const checkServer = async (host) => {
 
     const session = ping.createSession({
         sessionId,
-        networkProtocol: isIPv6(host) ? ping.NetworkProtocol.IPv6 : ping.NetworkProtocol.IPv4,
+        networkProtocol: net.isIPv6(host) ? ping.NetworkProtocol.IPv6 : ping.NetworkProtocol.IPv4,
         timeout: 1000,
         packetSize: 64,
         ttl: 64,

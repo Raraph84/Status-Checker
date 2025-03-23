@@ -77,6 +77,6 @@ const median = (values) => {
         ? values[half]
         : (values[half - 1] + values[half]) / 2
     );
-}
+};
 
 module.exports = { limits, alert, splitEmbed, genPingSessionId, releasePingSessionId, median };
