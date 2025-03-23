@@ -150,9 +150,13 @@ const checkServices = async () => {
             }
         }
 
-        const server = servers.find((server) => server.ipv4 === ipv4 || server.ipv6 === ipv6);
+        const server = servers.find((server) => (server.ipv4 && server.ipv4 === ipv4) || (server.ipv6 && server.ipv6 === ipv6));
         if (!server) servers.push({ ipv4, ipv6, services: [service] });
-        else server.services.push(service);
+        else {
+            if (!server.ipv4) server.ipv4 = ipv4;
+            if (!server.ipv6) server.ipv6 = ipv6;
+            server.services.push(service);
+        }
     }
 
     await Promise.all(servers.map(async (server) => {
