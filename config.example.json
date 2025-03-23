@@ -1,0 +1,8 @@
+{
+    "database": {
+        "host": "checker.status.polycube.fr",
+        "user": "status_checker",
+        "database": "status"
+    },
+    "checkerId": 0
+}
