@@ -3,15 +3,15 @@ const net = require("net");
 const ping = require("net-ping");
 
 let pings = [];
+let smokepingServices = [];
 
 /**
  * @param {number} checkerId 
- * @param {{ id: number; ip: string; }} checkerId 
  * @param {import("mysql2/promise").Pool} database 
  */
-const smokeping = async (checkerId, services, database) => {
+const smokeping = async (checkerId, database) => {
 
-    services.forEach((service, i) => setTimeout(async () => {
+    smokepingServices.forEach((service, i) => setTimeout(async () => {
 
         const time = Math.floor(Date.now() / 1000 / 10);
         const sessionId = genPingSessionId();
@@ -43,7 +43,7 @@ const smokeping = async (checkerId, services, database) => {
 
         pings.push({ time, id: service.id, latency: res, error });
 
-    }, 2000 / services.length * i));
+    }, 2000 / smokepingServices.length * i));
 
     const time = Math.floor(Date.now() / 1000 / 10);
     const times = pings.map((ping) => ping.time).filter((t) => t <= time - 2).filter((t, i, a) => a.indexOf(t) === i);
@@ -77,4 +77,38 @@ const smokeping = async (checkerId, services, database) => {
     }
 };
 
-module.exports = { smokeping };
+/**
+ * @param {number} checkerId 
+ * @param {import("mysql2/promise").Pool} database 
+ */
+const updateServices = async (checkerId, database) => {
+
+    let services;
+    try {
+        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=? AND type='server' AND !disabled", [checkerId]);
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    smokepingServices = smokepingServices.filter((service) => services.some((s) => service.id === s.service_id));
+
+    for (const service of services) {
+
+        let serverIp;
+        if (net.isIP(service.host)) serverIp = service.host;
+        else {
+            try {
+                serverIp = (await dns.lookup(service.host, { family: service.protocol })).address;
+            } catch (error) {
+                continue;
+            }
+        }
+
+        const old = smokepingServices.find((s) => s.id === service.service_id);
+        if (old) old.ip = serverIp;
+        else smokepingServices.push({ id: service.service_id, ip: serverIp });
+    }
+};
+
+module.exports = { smokeping, updateServices };

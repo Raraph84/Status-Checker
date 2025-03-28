@@ -3,7 +3,6 @@ const { createPool } = require("mysql2/promise");
 const { getConfig, TaskManager } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./src/checkers");
 const { limits, alert, splitEmbed } = require("./src/utils");
-const { smokeping } = require("./src/smokeping");
 const net = require("net");
 const config = getConfig(__dirname);
 
@@ -44,21 +43,21 @@ tasks.addTask(async (resolve, reject) => {
 
 let checkerInterval;
 tasks.addTask((resolve) => {
-    updateSmokepingServices();
+    require("./src/smokeping").updateServices(checker.checker_id, database);
     let lastMinute = -1;
     checkerInterval = setInterval(() => {
         const date = new Date();
         if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
         lastMinute = date.getMinutes();
         checkServices();
-        updateSmokepingServices();
+        require("./src/smokeping").updateServices(checker.checker_id, database);
     }, 500);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
 
 let smokepingInterval;
 tasks.addTask((resolve) => {
-    smokepingInterval = setInterval(() => smokeping(checker.checker_id, smokepingServices, database), 2000);
+    smokepingInterval = setInterval(() => require("./src/smokeping").smokeping(checker.checker_id, database), 2000);
     resolve();
 }, (resolve) => {
     clearInterval(smokepingInterval);
@@ -66,37 +65,6 @@ tasks.addTask((resolve) => {
 });
 
 tasks.run();
-
-let smokepingServices = [];
-const updateSmokepingServices = async () => {
-
-    let services;
-    try {
-        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=? AND type='server' AND !disabled", [checker.checker_id]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        return;
-    }
-
-    smokepingServices = smokepingServices.filter((service) => services.some((s) => service.id === s.service_id));
-
-    for (const service of services) {
-
-        let serverIp;
-        if (net.isIP(service.host)) serverIp = service.host;
-        else {
-            try {
-                serverIp = (await dns.lookup(service.host, { family: service.protocol })).address;
-            } catch (error) {
-                continue;
-            }
-        }
-
-        const old = smokepingServices.find((s) => s.id === service.service_id);
-        if (old) old.ip = serverIp;
-        else smokepingServices.push({ id: service.service_id, ip: serverIp });
-    }
-};
 
 const checkServices = async () => {
 
