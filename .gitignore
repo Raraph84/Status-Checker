@@ -3,3 +3,4 @@ config.dev.json
 config.json
 .env
 .env.local
+temp.db

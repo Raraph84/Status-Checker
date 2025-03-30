@@ -1,15 +1,16 @@
 const { genPingSessionId, releasePingSessionId, median } = require("./utils");
 const net = require("net");
+const dns = require("dns/promises");
 const ping = require("net-ping");
 
 let pings = [];
 let smokepingServices = [];
 
 /**
- * @param {number} checkerId 
  * @param {import("mysql2/promise").Pool} database 
+ * @param {import("sqlite").Database} tempDatabase 
  */
-const smokeping = async (checkerId, database) => {
+const smokeping = async (database, tempDatabase) => {
 
     smokepingServices.forEach((service, i) => setTimeout(async () => {
 
@@ -66,15 +67,17 @@ const smokeping = async (checkerId, database) => {
             const lost = (servicePings.length - latencies.length) || null;
 
             try {
-                await database.query(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, ?, 10, 5, ?, ?, ?, ?)",
-                    [service, checkerId, time, lost, med, min, max]
+                await tempDatabase.run(
+                    "INSERT INTO services_smokeping (service_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, 10, 5, ?, ?, ?, ?)",
+                    [service, time, lost, med, min, max]
                 );
             } catch (error) {
                 console.log(`SQL Error - ${__filename} - ${error}`);
             }
         }
     }
+
+    await require("./database").save();
 };
 
 /**
