@@ -1,9 +1,13 @@
+const { getConfig } = require("raraph84-lib");
 const { genPingSessionId, releasePingSessionId, median } = require("./utils");
 const net = require("net");
 const dns = require("dns/promises");
 const ping = require("net-ping");
+const config = getConfig(__dirname + "/..");
 
+/** @type {{ time: number; id: string; latency: number | null; error: any | null; }[]} */
 let pings = [];
+/** @type {{ id: string; ip: string; }[]} */
 let smokepingServices = [];
 
 /**
@@ -12,9 +16,10 @@ let smokepingServices = [];
  */
 const smokeping = async (database, tempDatabase) => {
 
+    const time = Math.floor(Date.now() / 1000 / 10);
+
     smokepingServices.forEach((service, i) => setTimeout(async () => {
 
-        const time = Math.floor(Date.now() / 1000 / 10);
         const sessionId = genPingSessionId();
 
         const session = ping.createSession({
@@ -46,7 +51,6 @@ const smokeping = async (database, tempDatabase) => {
 
     }, 2000 / smokepingServices.length * i));
 
-    const time = Math.floor(Date.now() / 1000 / 10);
     const times = pings.map((ping) => ping.time).filter((t) => t <= time - 2).filter((t, i, a) => a.indexOf(t) === i);
 
     for (const time of times) {
@@ -68,27 +72,26 @@ const smokeping = async (database, tempDatabase) => {
 
             try {
                 await tempDatabase.run(
-                    "INSERT INTO services_smokeping (service_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, 10, 5, ?, ?, ?, ?)",
+                    "INSERT INTO services_smokeping (service_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, 1, 5, ?, ?, ?, ?)",
                     [service, time, lost, med, min, max]
                 );
             } catch (error) {
                 console.log(`SQL Error - ${__filename} - ${error}`);
             }
         }
-    }
 
-    await require("./database").save();
+        await require("./database").save(database, tempDatabase);
+    }
 };
 
 /**
- * @param {number} checkerId 
  * @param {import("mysql2/promise").Pool} database 
  */
-const updateServices = async (checkerId, database) => {
+const updateServices = async (database) => {
 
     let services;
     try {
-        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=? AND type='server' AND !disabled", [checkerId]);
+        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=? AND type='server' AND !disabled", [config.checkerId]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;

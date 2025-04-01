@@ -32,7 +32,7 @@ tasks.addTask((resolve, reject) => {
     });
 }, (resolve) => tempDatabase.end().then(() => resolve()));
 
-tasks.addTask((resolve, reject) => require("./src/database").init(database, tempDatabase).then(resolve).catch(reject), (resolve) => resolve());
+tasks.addTask((resolve, reject) => require("./src/database").init(tempDatabase).then(resolve).catch(reject), (resolve) => resolve());
 
 let checker = null;
 tasks.addTask((resolve, reject) => {
@@ -52,14 +52,14 @@ tasks.addTask((resolve, reject) => {
 
 let checkerInterval = null;
 tasks.addTask((resolve) => {
-    require("./src/smokeping").updateServices(checker.checker_id, database);
+    require("./src/smokeping").updateServices(database);
     let lastMinute = -1;
     checkerInterval = setInterval(() => {
         const date = new Date();
         if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
         lastMinute = date.getMinutes();
         require("./src/status").checkServices(database, checker);
-        require("./src/smokeping").updateServices(checker.checker_id, database);
+        require("./src/smokeping").updateServices(database);
     }, 500);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });

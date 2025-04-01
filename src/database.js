@@ -1,23 +1,21 @@
 const { getConfig } = require("raraph84-lib");
 const config = getConfig(__dirname + "/..");
 
-/** @type {import("mysql2/promise").Pool} */
-let database = null;
-/** @type {import("sqlite").Database} */
-let tempDatabase = null;
+/**
+ * @param {import("sqlite").Database} tempDatabase 
+ */
+module.exports.init = async (tempDatabase) => {
 
-module.exports.init = async (db, tdb) => {
-
-    await tdb.run("CREATE TABLE IF NOT EXISTS services_smokeping (service_id INTEGER NOT NULL, start_time INTEGER NOT NULL, duration INTEGER NOT NULL, sent INTEGER NOT NULL, lost INTEGER DEFAULT NULL, med_response_time INTEGER DEFAULT NULL, min_response_time INTEGER DEFAULT NULL, max_response_time INTEGER DEFAULT NULL)");
-
-    database = db;
-    tempDatabase = tdb;
+    await tempDatabase.run("CREATE TABLE IF NOT EXISTS services_smokeping (service_id INTEGER NOT NULL, start_time INTEGER NOT NULL, duration INTEGER NOT NULL, sent INTEGER NOT NULL, lost INTEGER DEFAULT NULL, med_response_time INTEGER DEFAULT NULL, min_response_time INTEGER DEFAULT NULL, max_response_time INTEGER DEFAULT NULL)");
 };
 
 let saving = false;
-module.exports.save = async () => {
 
-    if (!database || !tempDatabase) throw new Error("Not initialized");
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ * @param {import("sqlite").Database} tempDatabase 
+ */
+module.exports.save = async (database, tempDatabase) => {
 
     if (saving) return;
     saving = true;
