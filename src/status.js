@@ -113,6 +113,7 @@ const checkServices = async (database, checker) => {
     const checkDuration = (Date.now() - currentDate) / 1000;
 
     if (offlineAlerts.length > 0) {
+        const everyone = offlineAlerts.some((service) => service.alert) ? "@everyone " : "";
         const embeds = splitEmbed({
             title: `Services hors ligne pour ${checker.name} ${checker.location}`,
             description: offlineAlerts.map((service) => `:warning: **Le service **\`${service.name}\`** est hors ligne.**\n${service.error}`).join("\n"),
@@ -121,7 +122,7 @@ const checkServices = async (database, checker) => {
             color: 0xFF0000.toString()
         });
         try {
-            await alert({ content: `@everyone **${offlineAlerts.length} Service${offlineAlerts.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}` });
+            await alert({ content: `${everyone}**${offlineAlerts.length} Service${offlineAlerts.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}` });
             for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
@@ -129,6 +130,7 @@ const checkServices = async (database, checker) => {
     }
 
     if (onlineAlerts.length > 0) {
+        const everyone = onlineAlerts.some((service) => service.alert) ? "@everyone " : "";
         const embeds = splitEmbed({
             title: `Services en ligne pour ${checker.name} ${checker.location}`,
             description: [
@@ -140,7 +142,7 @@ const checkServices = async (database, checker) => {
             color: 0x00FF00.toString()
         });
         try {
-            await alert({ content: `@everyone **${onlineAlerts.length} Service${onlineAlerts.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}` });
+            await alert({ content: `${everyone}**${onlineAlerts.length} Service${onlineAlerts.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}` });
             for (const embed of embeds) await alert({ embeds: [embed] });
         } catch (error) {
             console.log("Cannot send alert - " + error);
