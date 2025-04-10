@@ -8,9 +8,9 @@ const config = getConfig(__dirname + "/..");
 const aggregations = [
     { duration: 1, storage: 7 },         // 10s for 1 week
     { duration: 3, storage: 14 },        // 30s for 2 weeks
-    //{ duration: 6, storage: 28 },        // 1m for ~1 month
-    //{ duration: 6 * 5, storage: 84 },    // 5m for ~3 months
-    //{ duration: 6 * 10, storage: 364 },  // 10m for ~1 year
+    { duration: 6, storage: 28 },        // 1m for ~1 month
+    { duration: 6 * 5, storage: 84 },    // 5m for ~3 months
+    { duration: 6 * 10, storage: 364 },  // 10m for ~1 year
 ];
 
 /** @type {{ time: number; id: string; latency: number | null; error: any | null; }[]} */
