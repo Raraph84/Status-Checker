@@ -1,7 +1,5 @@
 const { createPool } = require("mysql2/promise");
-const { Database } = require("sqlite3");
 const { getConfig, TaskManager } = require("raraph84-lib");
-const sqlite = require("sqlite");
 const config = getConfig(__dirname);
 
 require("dotenv").config({ path: [".env.local", ".env"] });
@@ -22,19 +20,9 @@ tasks.addTask((resolve, reject) => {
 
 /** @type {import("sqlite").Database|null} */
 let tempDatabase = null;
-tasks.addTask((resolve, reject) => {
-    sqlite.open({ filename: "temp.db", driver: Database }).then((db) => {
-        tempDatabase = db;
-        resolve();
-    }).catch((error) => {
-        console.log("Cannot open the temporary database - " + error);
-        reject();
-    });
-}, (resolve) => tempDatabase.end().then(() => resolve()));
-
 tasks.addTask(
-    (resolve, reject) => require("./src/database").init(tempDatabase).then(resolve).catch(reject),
-    (resolve) => database.end().then(resolve)
+    (resolve, reject) => require("./src/database").init((db) => tempDatabase = db).then(resolve).catch(reject),
+    (resolve) => require("./src/database").stop(tempDatabase).then(resolve)
 );
 
 tasks.addTask(

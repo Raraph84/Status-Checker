@@ -1,12 +1,28 @@
 const { getConfig } = require("raraph84-lib");
+const { Database } = require("sqlite3");
+const sqlite = require("sqlite");
 const config = getConfig(__dirname + "/..");
+
+module.exports.init = async (setTempDatabase) => {
+
+    let tempDatabase;
+    try {
+        tempDatabase = await sqlite.open({ filename: "temp.db", driver: Database });
+    } catch (error) {
+        console.log("Cannot open the temporary database - " + error);
+        throw error;
+    }
+
+    await tempDatabase.run("CREATE TABLE IF NOT EXISTS services_smokeping (service_id INTEGER NOT NULL, start_time INTEGER NOT NULL, duration INTEGER NOT NULL, sent INTEGER NOT NULL, lost INTEGER DEFAULT NULL, med_response_time INTEGER DEFAULT NULL, min_response_time INTEGER DEFAULT NULL, max_response_time INTEGER DEFAULT NULL)");
+
+    setTempDatabase(tempDatabase);
+};
 
 /**
  * @param {import("sqlite").Database} tempDatabase 
  */
-module.exports.init = async (tempDatabase) => {
-
-    await tempDatabase.run("CREATE TABLE IF NOT EXISTS services_smokeping (service_id INTEGER NOT NULL, start_time INTEGER NOT NULL, duration INTEGER NOT NULL, sent INTEGER NOT NULL, lost INTEGER DEFAULT NULL, med_response_time INTEGER DEFAULT NULL, min_response_time INTEGER DEFAULT NULL, max_response_time INTEGER DEFAULT NULL)");
+module.exports.stop = async (tempDatabase) => {
+    await tempDatabase.close();
 };
 
 let saving = false;
