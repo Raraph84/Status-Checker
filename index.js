@@ -50,16 +50,19 @@ tasks.addTask((resolve, reject) => {
     });
 }, (resolve) => resolve());
 
+tasks.addTask(
+    (resolve, reject) => require("./src/services").init(database).then(resolve).catch(reject),
+    (resolve) => require("./src/services").stop().then(resolve)
+);
+
 let checkerInterval = null;
 tasks.addTask((resolve) => {
-    require("./src/smokeping").updateServices(database);
     let lastMinute = -1;
     checkerInterval = setInterval(() => {
         const date = new Date();
         if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
         lastMinute = date.getMinutes();
         require("./src/status").checkServices(database, checker);
-        require("./src/smokeping").updateServices(database);
     }, 500);
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
@@ -72,5 +75,10 @@ tasks.addTask((resolve) => {
     clearInterval(smokepingInterval);
     resolve();
 });
+
+tasks.addTask(
+    (resolve, reject) => require("./src/smokeping").init(database).then(resolve).catch(reject),
+    (resolve) => require("./src/smokeping").stop().then(resolve)
+);
 
 tasks.run();

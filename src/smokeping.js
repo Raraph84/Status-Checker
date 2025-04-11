@@ -1,7 +1,6 @@
 const { getConfig } = require("raraph84-lib");
 const { genPingSessionId, releasePingSessionId, median } = require("./utils");
 const net = require("net");
-const dns = require("dns/promises");
 const ping = require("net-ping");
 const config = getConfig(__dirname + "/..");
 
@@ -22,7 +21,7 @@ let smokepingServices = [];
  * @param {import("mysql2/promise").Pool} database 
  * @param {import("sqlite").Database} tempDatabase 
  */
-const smokeping = async (database, tempDatabase) => {
+module.exports.smokeping = async (database, tempDatabase) => {
 
     const time = Math.floor(Date.now() / 1000 / 10);
 
@@ -92,39 +91,18 @@ const smokeping = async (database, tempDatabase) => {
     }
 };
 
-/**
- * @param {import("mysql2/promise").Pool} database 
- */
-const updateServices = async (database) => {
+module.exports.updateServices = () => {
 
-    let services;
-    try {
-        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=? AND type='server' AND !disabled", [config.checkerId]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        return;
-    }
+    const services = require("./services").getServices().filter((service) => service.type === "server" && !service.disabled);
 
     smokepingServices = smokepingServices.filter((service) => services.some((s) => service.id === s.service_id));
 
     for (const service of services) {
-
-        let serverIp;
-        if (net.isIP(service.host)) serverIp = service.host;
-        else {
-            try {
-                serverIp = (await dns.lookup(service.host, { family: service.protocol })).address;
-            } catch (error) {
-                continue;
-            }
-        }
-
+        if (!service.ip) continue;
         const old = smokepingServices.find((s) => s.id === service.service_id);
-        if (old) old.ip = serverIp;
-        else smokepingServices.push({ id: service.service_id, ip: serverIp });
+        if (old) old.ip = service.ip;
+        else smokepingServices.push({ id: service.service_id, ip: service.ip });
     }
-
-    await aggregate(database);
 };
 
 let aggregating = false;
@@ -132,7 +110,7 @@ let aggregating = false;
 /**
  * @param {import("mysql2/promise").Pool} database 
  */
-const aggregate = async (database) => {
+module.exports.aggregate = async (database) => {
 
     if (aggregating) return;
     aggregating = true;
@@ -207,4 +185,16 @@ const aggregate = async (database) => {
     aggregating = false;
 };
 
-module.exports = { smokeping, updateServices };
+let aggregateInterval = null;
+
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ */
+module.exports.init = async (database) => {
+    await aggregate(database);
+    aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
+};
+
+module.exports.stop = async () => {
+    clearInterval(aggregateInterval);
+};
