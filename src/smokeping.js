@@ -1,5 +1,5 @@
 const { getConfig } = require("raraph84-lib");
-const { genPingSessionId, releasePingSessionId, median } = require("./utils");
+const { median } = require("./utils");
 const net = require("net");
 const ping = require("net-ping");
 const config = getConfig(__dirname + "/..");
@@ -36,6 +36,22 @@ let pings = [];
 /** @type {{ id: string; ip: string; }[]} */
 let smokepingServices = [];
 
+const v4session = new ping.Session({
+    networkProtocol: ping.NetworkProtocol.IPv4,
+    timeout: 1000,
+    packetSize: 64,
+    ttl: 64,
+    retries: 0
+});
+
+const v6session = new ping.Session({
+    networkProtocol: ping.NetworkProtocol.IPv6,
+    timeout: 1000,
+    packetSize: 64,
+    ttl: 64,
+    retries: 0
+});
+
 /**
  * @param {import("mysql2/promise").Pool} database 
  */
@@ -45,22 +61,8 @@ const smokeping = async (database) => {
 
     smokepingServices.forEach((service, i) => setTimeout(() => {
 
-        const sessionId = genPingSessionId();
-
-        const session = ping.createSession({
-            sessionId,
-            networkProtocol: net.isIPv6(service.ip) ? ping.NetworkProtocol.IPv6 : ping.NetworkProtocol.IPv4,
-            timeout: 1000,
-            packetSize: 64,
-            ttl: 64,
-            retries: 0
-        });
-
+        const session = net.isIPv4(service.ip) ? v4session : v6session;
         session.pingHost(service.ip, (error, _target, sent, rcvd) => {
-
-            session.close();
-            releasePingSessionId(sessionId);
-
             if (error)
                 pings.push({ time, id: service.id, latency: null, error });
             else

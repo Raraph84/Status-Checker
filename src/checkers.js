@@ -1,43 +1,35 @@
 const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
-const { genPingSessionId, releasePingSessionId } = require("./utils");
 const Ws = require("ws");
 const net = require("net");
 const ping = require("net-ping");
 
-const checkServer = async (host) => {
+const v4session = new ping.Session({
+    sessionId: process.pid + 1,
+    networkProtocol: ping.NetworkProtocol.IPv4,
+    timeout: 1000,
+    packetSize: 64,
+    ttl: 64,
+    retries: 4
+});
 
-    const sessionId = genPingSessionId();
+const v6session = new ping.Session({
+    sessionId: process.pid + 1,
+    networkProtocol: ping.NetworkProtocol.IPv6,
+    timeout: 1000,
+    packetSize: 64,
+    ttl: 64,
+    retries: 4
+});
 
-    const session = ping.createSession({
-        sessionId,
-        networkProtocol: net.isIPv6(host) ? ping.NetworkProtocol.IPv6 : ping.NetworkProtocol.IPv4,
-        timeout: 1000,
-        packetSize: 64,
-        ttl: 64,
-        retries: 4
+const checkServer = (host) => new Promise((resolve, reject) => {
+    const session = net.isIPv4(host) ? v4session : v6session;
+    session.pingHost(host, (error, _target, sent, rcvd) => {
+        if (error) reject(error);
+        else resolve(Number(rcvd - sent) / 1000);
     });
-
-    let res = null;
-    let error = null;
-    try {
-        res = await new Promise((resolve, reject) => {
-            session.pingHost(host, (error, target, sent, rcvd) => {
-                if (error) reject(error);
-                else resolve(Number(rcvd - sent) / 1000);
-            });
-        });
-    } catch (e) {
-        error = e;
-    }
-
-    session.close();
-    releasePingSessionId(sessionId);
-
-    if (error) throw error;
-    return res;
-};
+});
 
 const checkWebsite = (host) => new Promise((resolve, reject) => {
 

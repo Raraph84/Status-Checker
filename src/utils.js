@@ -54,16 +54,6 @@ const alert = (message) => new Promise((resolve, reject) => {
     }).catch((error) => reject(error.toString()));
 });
 
-const pingSessions = [];
-const genPingSessionId = () => {
-    let sessionId = process.pid;
-    while (pingSessions.includes(sessionId % 65535)) sessionId++;
-    sessionId %= 65535;
-    pingSessions.push(sessionId);
-    return sessionId;
-};
-const releasePingSessionId = (sessionId) => setTimeout(() => pingSessions.splice(pingSessions.indexOf(sessionId), 1), 30 * 1000);
-
 const median = (values) => {
 
     if (values.length === 0)
@@ -79,4 +69,4 @@ const median = (values) => {
     );
 };
 
-module.exports = { limits, alert, splitEmbed, genPingSessionId, releasePingSessionId, median };
+module.exports = { limits, alert, splitEmbed, median };

@@ -10,7 +10,7 @@ let checkInterval = null;
  */
 module.exports.init = async (database) => {
 
-    let checker = null;
+    let checker;
     try {
         checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
     } catch (error) {
