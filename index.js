@@ -32,40 +32,20 @@ tasks.addTask((resolve, reject) => {
     });
 }, (resolve) => tempDatabase.end().then(() => resolve()));
 
-tasks.addTask((resolve, reject) => require("./src/database").init(tempDatabase).then(resolve).catch(reject), (resolve) => resolve());
-
-let checker = null;
-tasks.addTask((resolve, reject) => {
-    database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]).then(([checkers]) => {
-        if (!checkers[0]) {
-            console.log("Checker does not exist.");
-            reject();
-            return;
-        }
-        checker = checkers[0];
-        resolve();
-    }).catch((error) => {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        reject();
-    });
-}, (resolve) => resolve());
+tasks.addTask(
+    (resolve, reject) => require("./src/database").init(tempDatabase).then(resolve).catch(reject),
+    (resolve) => database.end().then(resolve)
+);
 
 tasks.addTask(
     (resolve, reject) => require("./src/services").init(database).then(resolve).catch(reject),
     (resolve) => require("./src/services").stop().then(resolve)
 );
 
-let checkerInterval = null;
-tasks.addTask((resolve) => {
-    let lastMinute = -1;
-    checkerInterval = setInterval(() => {
-        const date = new Date();
-        if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
-        lastMinute = date.getMinutes();
-        require("./src/status").checkServices(database, checker);
-    }, 500);
-    resolve();
-}, (resolve) => { clearInterval(checkerInterval); resolve(); });
+tasks.addTask(
+    (resolve, reject) => require("./src/status").init(database).then(resolve).catch(reject),
+    (resolve) => require("./src/status").stop().then(resolve)
+);
 
 tasks.addTask(
     (resolve, reject) => require("./src/smokeping").init(database, tempDatabase).then(resolve).catch(reject),

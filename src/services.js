@@ -8,6 +8,9 @@ module.exports.getServices = () => services;
 
 let updateInterval = null;
 
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ */
 module.exports.init = async (database) => {
 
     const update = async () => {

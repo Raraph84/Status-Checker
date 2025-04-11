@@ -1,5 +1,7 @@
+const { getConfig } = require("raraph84-lib");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const { limits, alert, splitEmbed } = require("./utils");
+const config = getConfig(__dirname + "/..");
 
 const checkServices = async (database, checker) => {
 
@@ -64,15 +66,15 @@ const checkServices = async (database, checker) => {
         if (!check) throw new Error("Service " + service.service_id + " not checked.");
 
         if (check.online) {
-            const alreadyOnline = await serviceOnline(database, checker, service, check.responseTime, currentMinute);
+            const alreadyOnline = await serviceOnline(database, service, check.responseTime, currentMinute);
             if (!alreadyOnline) onlineAlerts.push(service);
         } else {
-            const alreadyOffline = await serviceOffline(database, checker, service, currentMinute);
+            const alreadyOffline = await serviceOffline(database, service, currentMinute);
             if (!alreadyOffline) offlineAlerts.push({ ...service, error: check.error });
             if (!service.disabled) stillDown.push(service);
         }
 
-        await updateDailyStatuses(database, checker, service, currentDate);
+        await updateDailyStatuses(database, service, currentDate);
     }
 
     const checkDuration = (Date.now() - currentDate) / 1000;
@@ -117,11 +119,11 @@ const checkServices = async (database, checker) => {
     console.log("Services statuses checked in " + checkDuration.toFixed(1) + "s.");
 };
 
-const getLastStatus = async (database, checker, service) => {
+const getLastStatus = async (database, service) => {
 
     let lastEvent;
     try {
-        lastEvent = (await database.query("SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1", [service.service_id, checker.checker_id]))[0][0];
+        lastEvent = (await database.query("SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1", [service.service_id, config.checkerId]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
@@ -129,13 +131,13 @@ const getLastStatus = async (database, checker, service) => {
     return !!lastEvent?.online || false;
 };
 
-const serviceOnline = async (database, checker, service, responseTime, currentMinute) => {
+const serviceOnline = async (database, service, responseTime, currentMinute) => {
 
-    const alreadyOnline = await getLastStatus(database, checker, service);
+    const alreadyOnline = await getLastStatus(database, service);
 
     if (!alreadyOnline) {
         try {
-            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 1)", [service.service_id, checker.checker_id, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 1)", [service.service_id, config.checkerId, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -143,7 +145,7 @@ const serviceOnline = async (database, checker, service, responseTime, currentMi
 
     if (!service.disabled) {
         try {
-            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online, response_time) VALUES (?, ?, ?, 1, ?)", [service.service_id, checker.checker_id, currentMinute, responseTime]);
+            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online, response_time) VALUES (?, ?, ?, 1, ?)", [service.service_id, config.checkerId, currentMinute, responseTime]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -152,13 +154,13 @@ const serviceOnline = async (database, checker, service, responseTime, currentMi
     return alreadyOnline;
 };
 
-const serviceOffline = async (database, checker, service, currentMinute) => {
+const serviceOffline = async (database, service, currentMinute) => {
 
-    const alreadyOffline = !await getLastStatus(database, checker, service);
+    const alreadyOffline = !await getLastStatus(database, service);
 
     if (!alreadyOffline) {
         try {
-            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, checker.checker_id, currentMinute]);
+            await database.query("INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, config.checkerId, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -166,7 +168,7 @@ const serviceOffline = async (database, checker, service, currentMinute) => {
 
     if (!service.disabled) {
         try {
-            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, checker.checker_id, currentMinute]);
+            await database.query("INSERT INTO services_statuses (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)", [service.service_id, config.checkerId, currentMinute]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
         }
@@ -175,7 +177,7 @@ const serviceOffline = async (database, checker, service, currentMinute) => {
     return alreadyOffline;
 };
 
-const updateDailyStatuses = async (database, checker, service, currentDate) => {
+const updateDailyStatuses = async (database, service, currentDate) => {
 
     const day = Math.floor(currentDate / 1000 / 60 / 60 / 24) - 1;
     const firstMinute = day * 24 * 60;
@@ -183,7 +185,7 @@ const updateDailyStatuses = async (database, checker, service, currentDate) => {
 
     let lastDailyStatus;
     try {
-        lastDailyStatus = (await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1", [service.service_id, checker.checker_id]))[0][0];
+        lastDailyStatus = (await database.query("SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1", [service.service_id, config.checkerId]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -194,7 +196,7 @@ const updateDailyStatuses = async (database, checker, service, currentDate) => {
 
     let statuses;
     try {
-        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && checker_id=? && minute>=? && minute<?", [service.service_id, checker.checker_id, firstMinute, lastMinute]);
+        [statuses] = await database.query("SELECT * FROM services_statuses WHERE service_id=? && checker_id=? && minute>=? && minute<?", [service.service_id, config.checkerId, firstMinute, lastMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         return;
@@ -208,11 +210,39 @@ const updateDailyStatuses = async (database, checker, service, currentDate) => {
     const responseTime = onlineStatuses.length > 0 ? Math.round(onlineStatuses.reduce((acc, status) => acc + status.response_time, 0) / onlineStatuses.length * 10) / 10 : null;
 
     try {
-        await database.query("INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)", [service.service_id, checker.checker_id, day, statuses.length, uptime, responseTime]);
-        await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [service.service_id, checker.checker_id, firstMinute]);
+        await database.query("INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)", [service.service_id, config.checkerId, day, statuses.length, uptime, responseTime]);
+        await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [service.service_id, config.checkerId, firstMinute]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 };
 
-module.exports = { checkServices };
+let checkInterval = null;
+
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ */
+module.exports.init = async (database) => {
+
+    let checker = null;
+    try {
+        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        throw error;
+    }
+
+    if (!checker) throw new Error("Checker does not exist.");
+
+    let lastMinute = -1;
+    checkInterval = setInterval(() => {
+        const date = new Date();
+        if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
+        lastMinute = date.getMinutes();
+        checkServices(database, checker);
+    }, 500);
+};
+
+module.exports.stop = async () => {
+    clearInterval(checkInterval);
+};
