@@ -67,17 +67,8 @@ tasks.addTask((resolve) => {
     resolve();
 }, (resolve) => { clearInterval(checkerInterval); resolve(); });
 
-let smokepingInterval = null;
-tasks.addTask((resolve) => {
-    smokepingInterval = setInterval(() => require("./src/smokeping").smokeping(database, tempDatabase), 2000);
-    resolve();
-}, (resolve) => {
-    clearInterval(smokepingInterval);
-    resolve();
-});
-
 tasks.addTask(
-    (resolve, reject) => require("./src/smokeping").init(database).then(resolve).catch(reject),
+    (resolve, reject) => require("./src/smokeping").init(database, tempDatabase).then(resolve).catch(reject),
     (resolve) => require("./src/smokeping").stop().then(resolve)
 );
 

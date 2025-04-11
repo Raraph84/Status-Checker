@@ -21,7 +21,7 @@ let smokepingServices = [];
  * @param {import("mysql2/promise").Pool} database 
  * @param {import("sqlite").Database} tempDatabase 
  */
-module.exports.smokeping = async (database, tempDatabase) => {
+const smokeping = async (database, tempDatabase) => {
 
     const time = Math.floor(Date.now() / 1000 / 10);
 
@@ -110,7 +110,7 @@ let aggregating = false;
 /**
  * @param {import("mysql2/promise").Pool} database 
  */
-module.exports.aggregate = async (database) => {
+const aggregate = async (database) => {
 
     if (aggregating) return;
     aggregating = true;
@@ -185,16 +185,22 @@ module.exports.aggregate = async (database) => {
     aggregating = false;
 };
 
+let smokepingInterval = null;
 let aggregateInterval = null;
 
 /**
  * @param {import("mysql2/promise").Pool} database 
+ * @param {import("sqlite").Database} tempDatabase 
  */
-module.exports.init = async (database) => {
+module.exports.init = async (database, tempDatabase) => {
+
     await aggregate(database);
+
+    smokepingInterval = setInterval(() => smokeping(database, tempDatabase), 2000);
     aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
 };
 
 module.exports.stop = async () => {
+    clearInterval(smokepingInterval);
     clearInterval(aggregateInterval);
 };

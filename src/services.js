@@ -29,12 +29,26 @@ module.exports.init = async (database) => {
             else if (service.type === "minecraft") host = service.host.split(/:/)[0];
             else host = new URL(service.host).hostname.replace(/^\[|]$/g, "");
 
-            let ip = null;
-            let error = null;
+            if (![0, 4, 6].includes(service.protocol)) {
+                newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: new Error("Invalid protocol") });
+                continue;
+            }
 
-            if (net.isIPv4(host)) ip = host;
-            else if (net.isIPv6(host)) ip = host;
-            else {
+            if (net.isIPv4(host)) {
+
+                if (service.protocol === 6)
+                    newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: new Error("IPv4 address provided for IPv6 protocol") });
+                else
+                    newServices.push({ ...service, ipv4: host, ipv6: null, ip: host, error: null });
+
+            } else if (net.isIPv6(host)) {
+
+                if (service.protocol === 4)
+                    newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: new Error("IPv6 address provided for IPv4 protocol") });
+                else
+                    newServices.push({ ...service, ipv4: null, ipv6: host, ip: host, error: null });
+
+            } else {
 
                 if (service.type === "minecraft") {
                     let results;
@@ -46,10 +60,24 @@ module.exports.init = async (database) => {
                         host = results[0].name;
                 }
 
-                await dns.lookup(host, { family: service.protocol }).then((res) => ip = res.address).catch((e) => error = e);
-            }
+                let ipv6 = null;
+                let ipv6error = null;
+                let ipv4 = null;
+                let ipv4error = null;
+                await dns.lookup(host, { family: 6 }).then((res) => ipv6 = res.address).catch((e) => ipv6error = e);
+                await dns.lookup(host, { family: 4 }).then((res) => ipv4 = res.address).catch((e) => ipv4error = e);
 
-            newServices.push({ ...service, ip, error });
+                if (service.protocol === 4) {
+                    if (ipv4) newServices.push({ ...service, ipv4, ipv6, ip: ipv4, error: null });
+                    else newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: ipv4error });
+                } else if (service.protocol === 6) {
+                    if (ipv6) newServices.push({ ...service, ipv4, ipv6, ip: ipv6, error: null });
+                    else newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: ipv6error });
+                } else {
+                    if (ipv6 || ipv4) newServices.push({ ...service, ipv4, ipv6, ip: ipv6 ?? ipv4, error: null });
+                    else newServices.push({ ...service, ipv4: null, ipv6: null, ip: null, error: new AggregateError([ipv6error, ipv4error]) });
+                }
+            }
         }
 
         services = newServices;

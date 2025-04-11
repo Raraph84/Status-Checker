@@ -1,7 +1,5 @@
-const { promises: dns } = require("dns");
 const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const { limits, alert, splitEmbed } = require("./utils");
-const net = require("net");
 
 const checkServices = async (database, checker) => {
 
@@ -10,56 +8,23 @@ const checkServices = async (database, checker) => {
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    let services;
-    try {
-        [services] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=?", [checker.checker_id]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        return;
-    }
+    const services = require("./services").getServices();
 
     const servers = [];
     const checks = [];
 
     for (const service of services) {
 
-        let host;
-        if (service.type === "server") host = service.host;
-        else if (service.type === "minecraft") host = service.host.split(/:/)[0];
-        else host = new URL(service.host).hostname.replace(/^\[|]$/g, "");
-
-        let ipv4 = null;
-        let ipv6 = null;
-
-        if (net.isIPv4(host)) ipv4 = host;
-        else if (net.isIPv6(host)) ipv6 = host;
-        else {
-
-            if (service.type === "minecraft") {
-                let results;
-                try {
-                    results = await dns.resolveSrv("_minecraft._tcp." + host);
-                } catch (error) {
-                }
-                if (results && results[0])
-                    host = results[0].name;
-            }
-
-            let error;
-            await dns.lookup(host, { family: 6 }).then((res) => ipv6 = res.address).catch((e) => error = e);
-            await dns.lookup(host, { family: 4 }).then((res) => ipv4 = res.address).catch((e) => error = e);
-
-            if (!ipv4 && !ipv6) {
-                checks.push({ serviceId: service.service_id, online: false, error });
-                continue;
-            }
+        if (!service.ip) {
+            checks.push({ serviceId: service.service_id, online: false, error: service.error });
+            continue;
         }
 
-        const server = servers.find((server) => (server.ipv4 && server.ipv4 === ipv4) || (server.ipv6 && server.ipv6 === ipv6));
-        if (!server) servers.push({ ipv4, ipv6, services: [service] });
+        const server = servers.find((server) => (server.ipv4 && server.ipv4 === service.ipv4) || (server.ipv6 && server.ipv6 === service.ipv6));
+        if (!server) servers.push({ ipv4: service.ipv4, ipv6: service.ipv6, services: [service] });
         else {
-            if (!server.ipv4) server.ipv4 = ipv4;
-            if (!server.ipv6) server.ipv6 = ipv6;
+            if (!server.ipv4) server.ipv4 = service.ipv4;
+            if (!server.ipv6) server.ipv6 = service.ipv6;
             server.services.push(service);
         }
     }
@@ -75,7 +40,7 @@ const checkServices = async (database, checker) => {
                 else if (service.type === "api") responseTime = await checkApi(service.host);
                 else if (service.type === "gateway") responseTime = await checkWs(service.host);
                 else if (service.type === "bot") await checkBot(service.host);
-                else if (service.type === "server") responseTime = await checkServer({ 4: server.ipv4, 6: server.ipv6, 0: server.ipv6 ?? server.ipv4 }[service.protocol]);
+                else if (service.type === "server") responseTime = await checkServer(service.ip);
             } catch (error) {
                 checks.push({ serviceId: service.service_id, online: false, error });
                 return;
