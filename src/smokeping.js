@@ -12,6 +12,25 @@ const aggregations = [
     { duration: 6 * 10, storage: 364 },  // 10m for ~1 year
 ];
 
+let smokepingInterval = null;
+let aggregateInterval = null;
+
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ */
+module.exports.init = async (database) => {
+
+    await aggregate(database);
+
+    smokepingInterval = setInterval(() => smokeping(database), 2000);
+    aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
+};
+
+module.exports.stop = async () => {
+    clearInterval(smokepingInterval);
+    clearInterval(aggregateInterval);
+};
+
 /** @type {{ time: number; id: string; latency: number | null; error: any | null; }[]} */
 let pings = [];
 /** @type {{ id: string; ip: string; }[]} */
@@ -19,9 +38,8 @@ let smokepingServices = [];
 
 /**
  * @param {import("mysql2/promise").Pool} database 
- * @param {import("sqlite").Database} tempDatabase 
  */
-const smokeping = async (database, tempDatabase) => {
+const smokeping = async (database) => {
 
     const time = Math.floor(Date.now() / 1000 / 10);
 
@@ -88,6 +106,7 @@ const smokeping = async (database, tempDatabase) => {
         }
 
         if (failed) {
+            const tempDatabase = require("./database").getTempDatabase();
             for (const insert of inserts) {
                 try {
                     await tempDatabase.run(
@@ -197,25 +216,4 @@ const aggregate = async (database) => {
 
     console.log("Aggregated smokeping data.");
     aggregating = false;
-};
-
-let smokepingInterval = null;
-let aggregateInterval = null;
-
-/**
- * @param {import("mysql2/promise").Pool} database 
- */
-module.exports.init = async (database) => {
-
-    const tempDatabase = require("./database").getTempDatabase();
-
-    await aggregate(database);
-
-    smokepingInterval = setInterval(() => smokeping(database, tempDatabase), 2000);
-    aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
-};
-
-module.exports.stop = async () => {
-    clearInterval(smokepingInterval);
-    clearInterval(aggregateInterval);
 };

@@ -3,6 +3,36 @@ const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot }
 const { limits, alert, splitEmbed } = require("./utils");
 const config = getConfig(__dirname + "/..");
 
+let checkInterval = null;
+
+/**
+ * @param {import("mysql2/promise").Pool} database 
+ */
+module.exports.init = async (database) => {
+
+    let checker = null;
+    try {
+        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        throw error;
+    }
+
+    if (!checker) throw new Error("Checker does not exist.");
+
+    let lastMinute = -1;
+    checkInterval = setInterval(() => {
+        const date = new Date();
+        if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
+        lastMinute = date.getMinutes();
+        checkServices(database, checker);
+    }, 500);
+};
+
+module.exports.stop = async () => {
+    clearInterval(checkInterval);
+};
+
 const checkServices = async (database, checker) => {
 
     console.log("Checking services statuses...");
@@ -215,34 +245,4 @@ const updateDailyStatuses = async (database, service, currentDate) => {
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
-};
-
-let checkInterval = null;
-
-/**
- * @param {import("mysql2/promise").Pool} database 
- */
-module.exports.init = async (database) => {
-
-    let checker = null;
-    try {
-        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        throw error;
-    }
-
-    if (!checker) throw new Error("Checker does not exist.");
-
-    let lastMinute = -1;
-    checkInterval = setInterval(() => {
-        const date = new Date();
-        if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
-        lastMinute = date.getMinutes();
-        checkServices(database, checker);
-    }, 500);
-};
-
-module.exports.stop = async () => {
-    clearInterval(checkInterval);
 };
