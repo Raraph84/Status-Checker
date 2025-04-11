@@ -18,11 +18,9 @@ tasks.addTask((resolve, reject) => {
     });
 }, (resolve) => database.end().then(() => resolve()));
 
-/** @type {import("sqlite").Database|null} */
-let tempDatabase = null;
 tasks.addTask(
-    (resolve, reject) => require("./src/database").init((db) => tempDatabase = db).then(resolve).catch(reject),
-    (resolve) => require("./src/database").stop(tempDatabase).then(resolve)
+    (resolve, reject) => require("./src/database").init(database).then(resolve).catch(reject),
+    (resolve) => require("./src/database").stop().then(resolve)
 );
 
 tasks.addTask(
@@ -36,7 +34,7 @@ tasks.addTask(
 );
 
 tasks.addTask(
-    (resolve, reject) => require("./src/smokeping").init(database, tempDatabase).then(resolve).catch(reject),
+    (resolve, reject) => require("./src/smokeping").init(database).then(resolve).catch(reject),
     (resolve) => require("./src/smokeping").stop().then(resolve)
 );
 

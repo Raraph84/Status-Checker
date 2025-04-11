@@ -25,7 +25,7 @@ const smokeping = async (database, tempDatabase) => {
 
     const time = Math.floor(Date.now() / 1000 / 10);
 
-    smokepingServices.forEach((service, i) => setTimeout(async () => {
+    smokepingServices.forEach((service, i) => setTimeout(() => {
 
         const sessionId = genPingSessionId();
 
@@ -38,28 +38,21 @@ const smokeping = async (database, tempDatabase) => {
             retries: 0
         });
 
-        let res = null;
-        let error = null;
-        try {
-            res = await new Promise((resolve, reject) => {
-                session.pingHost(service.ip, (error, _target, sent, rcvd) => {
-                    if (error) reject(error);
-                    else resolve(Math.round(Number(rcvd - sent) / 10));
-                });
-            });
-        } catch (e) {
-            error = e;
-        }
+        session.pingHost(service.ip, (error, _target, sent, rcvd) => {
 
-        session.close();
-        releasePingSessionId(sessionId);
+            session.close();
+            releasePingSessionId(sessionId);
 
-        pings.push({ time, id: service.id, latency: res, error });
+            if (error)
+                pings.push({ time, id: service.id, latency: null, error });
+            else
+                pings.push({ time, id: service.id, latency: Math.round(Number(rcvd - sent) / 10), error: null });
+        });
 
     }, 2000 / smokepingServices.length * i));
 
-    const times = pings.map((ping) => ping.time).filter((t) => t <= time - 2).filter((t, i, a) => a.indexOf(t) === i);
-
+    const times = pings.filter((ping) => ping.time <= time - 2).map((ping) => ping.time).filter((t, i, a) => a.indexOf(t) === i);
+    const inserts = [];
     for (const time of times) {
 
         const timePings = pings.filter((ping) => ping.time === time);
@@ -77,17 +70,35 @@ const smokeping = async (database, tempDatabase) => {
             const max = latencies.length ? Math.max(...latencies) : null;
             const lost = (servicePings.length - latencies.length) || null;
 
-            try {
-                await tempDatabase.run(
-                    "INSERT INTO services_smokeping (service_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, 1, 5, ?, ?, ?, ?)",
-                    [service, time, lost, med, min, max]
-                );
-            } catch (error) {
-                console.log(`SQL Error - ${__filename} - ${error}`);
-            }
+            inserts.push([service, config.checkerId, time, 1, 5, lost, med, min, max]);
+        }
+    }
+
+    if (inserts.length > 0) {
+
+        let failed = false;
+        try {
+            await database.query(
+                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES " + inserts.map(() => "(?)").join(", ") + " ON DUPLICATE KEY UPDATE service_id=service_id",
+                inserts
+            );
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+            failed = true;
         }
 
-        await require("./database").save(database, tempDatabase);
+        if (failed) {
+            for (const insert of inserts) {
+                try {
+                    await tempDatabase.run(
+                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        insert
+                    );
+                } catch (error) {
+                    console.log(`SQL Error - ${__filename} - ${error}`);
+                }
+            }
+        }
     }
 };
 
@@ -114,6 +125,8 @@ const aggregate = async (database) => {
 
     if (aggregating) return;
     aggregating = true;
+
+    console.log("Aggregating smokeping data...");
 
     const time = Math.floor(Date.now() / 1000 / 10);
 
@@ -168,7 +181,7 @@ const aggregate = async (database) => {
             while (inserts.length) {
                 const list = inserts.splice(0, 1000);
                 await database.query(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES " + list.map(() => "(?)").join(", ") + " ON DUPLICATE KEY UPDATE start_time=start_time",
+                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, lost, med_response_time, min_response_time, max_response_time) VALUES " + list.map(() => "(?)").join(", ") + " ON DUPLICATE KEY UPDATE service_id=service_id",
                     list
                 );
             }
@@ -182,6 +195,7 @@ const aggregate = async (database) => {
         }
     }
 
+    console.log("Aggregated smokeping data.");
     aggregating = false;
 };
 
@@ -190,9 +204,10 @@ let aggregateInterval = null;
 
 /**
  * @param {import("mysql2/promise").Pool} database 
- * @param {import("sqlite").Database} tempDatabase 
  */
-module.exports.init = async (database, tempDatabase) => {
+module.exports.init = async (database) => {
+
+    const tempDatabase = require("./database").getTempDatabase();
 
     await aggregate(database);
 
