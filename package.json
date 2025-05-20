@@ -7,13 +7,32 @@
   "author": "Raraph84",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "minecraft-ping-js": "^1.0.2",
-    "mysql2": "^3.14.0",
+    "mysql2": "^3.14.1",
     "net-ping": "github:Raraph84/node-net-ping-nanos",
-    "raraph84-lib": "^2.19.0",
+    "raraph84-lib": "^2.20.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "ws": "^8.18.1"
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3"
+  },
+  "prettier": {
+    "tabWidth": 4,
+    "trailingComma": "none",
+    "printWidth": 120,
+    "overrides": [
+      {
+        "files": [
+          "package.json",
+          "package-lock.json"
+        ],
+        "options": {
+          "tabWidth": 2
+        }
+      }
+    ]
   }
 }
