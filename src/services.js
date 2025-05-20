@@ -17,7 +17,7 @@ module.exports.init = async (database) => {
 
         let rawServices;
         try {
-            [rawServices] = await database.query("SELECT * FROM checkers_services INNER JOIN services ON services.service_id=checkers_services.service_id WHERE checker_id=?", [config.checkerId]);
+            [rawServices] = await database.query("SELECT DISTINCT services.* FROM groups_services INNER JOIN services ON groups_services.service_id=services.service_id WHERE group_id IN (SELECT group_id FROM groups_checkers WHERE checker_id=?)", [config.checkerId]);
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
             throw error;
