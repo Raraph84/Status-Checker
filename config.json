@@ -1,0 +1,8 @@
+{
+    "database": {
+        "host": "raraph84-clients-vps-ovh.polyc.be",
+        "user": "status_checker_",
+        "database": "status"
+    },
+    "checkerId": 0
+}
