@@ -1,30 +1,30 @@
 const limits = (maxConcurrent) => {
-
     const fns = [];
     let running = 0;
 
-    const limit = (shift, fn) => new Promise((resolve) => {
+    const limit = (shift, fn) =>
+        new Promise((resolve) => {
+            const run = async () => {
+                fns.splice(fns.indexOf(run), 1);
+                running++;
+                clearTimeout(timeout);
+                resolve(await fn());
+                running--;
+                if (fns.length > 0) fns[0]();
+            };
+            const timeout = setTimeout(run, shift);
 
-        const run = async () => {
-            fns.splice(fns.indexOf(run), 1);
-            running++;
-            clearTimeout(timeout);
-            resolve(await fn());
-            running--;
-            if (fns.length > 0) fns[0]();
-        };
-        const timeout = setTimeout(run, shift);
-
-        if (running < maxConcurrent) run();
-        else fns.push(run);
-    });
+            if (running < maxConcurrent) run();
+            else fns.push(run);
+        });
 
     return limit;
 };
 
 const splitEmbed = (embed) => {
-
-    const lines = embed.description.split("\n").map((line) => line = line.length > 4096 ? line.slice(0, 4093) + "..." : line);
+    const lines = embed.description
+        .split("\n")
+        .map((line) => (line = line.length > 4096 ? line.slice(0, 4093) + "..." : line));
 
     const descriptions = [[]];
     for (const line of lines) {
@@ -43,30 +43,28 @@ const splitEmbed = (embed) => {
     return embeds;
 };
 
-const alert = (message) => new Promise((resolve, reject) => {
-    fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(message)
-    }).then((res) => {
-        if (res.ok) resolve();
-        else res.text().then((text) => reject(text));
-    }).catch((error) => reject(error.toString()));
-});
+const alert = (message) =>
+    new Promise((resolve, reject) => {
+        fetch(process.env.ALERT_DISCORD_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(message)
+        })
+            .then((res) => {
+                if (res.ok) resolve();
+                else res.text().then((text) => reject(text));
+            })
+            .catch((error) => reject(error.toString()));
+    });
 
 const median = (values) => {
-
-    if (values.length === 0)
-        throw new Error("Input array is empty");
+    if (values.length === 0) throw new Error("Input array is empty");
 
     // Sorting values, preventing original array from being mutated.
     values = [...values].sort((a, b) => a - b);
 
     const half = Math.floor(values.length / 2);
-    return (values.length % 2
-        ? values[half]
-        : (values[half - 1] + values[half]) / 2
-    );
+    return values.length % 2 ? values[half] : (values[half - 1] + values[half]) / 2;
 };
 
 module.exports = { limits, alert, splitEmbed, median };
