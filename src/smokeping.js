@@ -80,7 +80,7 @@ const smokeping = async (database) => {
         .filter((ping) => ping.time <= time - 2)
         .map((ping) => ping.time)
         .filter((t, i, a) => a.indexOf(t) === i);
-    const inserts = [];
+    const checks = [];
     for (const time of times) {
         const timePings = pings.filter((ping) => ping.time === time);
         pings = pings.filter((ping) => ping.time !== time);
@@ -90,18 +90,27 @@ const smokeping = async (database) => {
             const servicePings = timePings.filter((ping) => ping.id === service);
             if (servicePings.length !== 5) continue;
 
-            const latencies = servicePings.map((ping) => ping.latency).filter((ping) => ping);
-            const med = latencies.length ? median(latencies) : null;
-            const min = latencies.length ? Math.min(...latencies) : null;
-            const max = latencies.length ? Math.max(...latencies) : null;
-            const lost = servicePings.length - latencies.length || null;
-            const downs = latencies.length === 0 ? 1 : null;
-
-            inserts.push([service, config.checkerId, time, 1, 5, lost, med, min, max, downs]);
+            checks.push({
+                service,
+                time,
+                pings: servicePings.map((ping) => ({ latency: ping.latency, error: ping.error }))
+            });
         }
     }
 
-    if (inserts.length > 0) {
+    if (checks.length) {
+        const inserts = [];
+        for (const check of checks) {
+            const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
+            const med = latencies.length ? median(latencies) : null;
+            const min = latencies.length ? Math.min(...latencies) : null;
+            const max = latencies.length ? Math.max(...latencies) : null;
+            const lost = check.pings.length - latencies.length || null;
+            const downs = latencies.length === 0 ? 1 : null;
+
+            inserts.push([check.service, config.checkerId, check.time, 1, 5, lost, med, min, max, downs]);
+        }
+
         let failed = false;
         try {
             await database.query(
