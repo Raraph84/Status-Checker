@@ -1,5 +1,5 @@
 const { getConfig } = require("raraph84-lib");
-const { checkServer, checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
+const { checkWebsite, checkMinecraft, checkApi, checkWs, checkBot } = require("./checkers");
 const { limits, alert, splitEmbed } = require("./utils");
 const config = getConfig(__dirname + "/..");
 
@@ -38,7 +38,9 @@ const checkServices = async (database, checker) => {
     const currentDate = Date.now();
     const currentMinute = Math.floor(currentDate / 1000 / 60);
 
-    const services = require("./services").getServices();
+    const services = require("./services")
+        .getServices()
+        .filter((service) => service.type !== "server");
 
     const servers = [];
     const checks = [];
@@ -73,7 +75,6 @@ const checkServices = async (database, checker) => {
                             else if (service.type === "api") responseTime = await checkApi(service.host);
                             else if (service.type === "gateway") responseTime = await checkWs(service.host);
                             else if (service.type === "bot") await checkBot(service.host);
-                            else if (service.type === "server") responseTime = await checkServer(service.ip);
                         } catch (error) {
                             checks.push({ serviceId: service.service_id, online: false, error });
                             return;
