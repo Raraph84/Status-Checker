@@ -2,35 +2,6 @@ const { request: httpsRequest } = require("https");
 const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
 const Ws = require("ws");
-const net = require("net");
-const ping = require("net-ping");
-
-const v4session = new ping.Session({
-    sessionId: process.pid + 1,
-    networkProtocol: ping.NetworkProtocol.IPv4,
-    timeout: 1000,
-    packetSize: 64,
-    ttl: 64,
-    retries: 4
-});
-
-const v6session = new ping.Session({
-    sessionId: process.pid + 1,
-    networkProtocol: ping.NetworkProtocol.IPv6,
-    timeout: 1000,
-    packetSize: 64,
-    ttl: 64,
-    retries: 4
-});
-
-const checkServer = (host) =>
-    new Promise((resolve, reject) => {
-        const session = net.isIPv4(host) ? v4session : v6session;
-        session.pingHost(host, (error, _target, sent, rcvd) => {
-            if (error) reject(error);
-            else resolve(Number(rcvd - sent) / 1000);
-        });
-    });
 
 const checkWebsite = (host) =>
     new Promise((resolve, reject) => {
@@ -112,27 +83,6 @@ const checkWs = (host) =>
         setTimeout(() => reject(new Error("timeout")), 10000);
     });
 
-const checkBot = (host) =>
-    new Promise((resolve, reject) => {
-        fetch(host)
-            .then((res) => {
-                if (res.status !== 200) {
-                    reject("Check failed");
-                    return;
-                }
-
-                res.json()
-                    .then((json) => {
-                        if (json.online) resolve();
-                        else reject("Bot offline");
-                    })
-                    .catch(() => reject("Check failed"));
-            })
-            .catch(() => reject("Check failed"));
-
-        setTimeout(() => reject("Check failed"), 10000);
-    });
-
 const checkMinecraft = (host) =>
     new Promise((resolve, reject) => {
         pingWithPromise(host.split(":")[0], parseInt(host.split(":")[1]) || 25565)
@@ -143,10 +93,8 @@ const checkMinecraft = (host) =>
     });
 
 module.exports = {
-    checkServer,
     checkWebsite,
     checkApi,
     checkWs,
-    checkBot,
     checkMinecraft
 };
