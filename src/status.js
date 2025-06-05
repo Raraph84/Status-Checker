@@ -70,10 +70,10 @@ const checkServices = async (database, checker) => {
                     limit(i * 100, async () => {
                         let responseTime = null;
                         try {
-                            if (service.type === "website") responseTime = await checkWebsite(service.host);
-                            else if (service.type === "minecraft") responseTime = await checkMinecraft(service.host);
-                            else if (service.type === "api") responseTime = await checkApi(service.host);
+                            if (service.type === "website") responseTime = await checkWebsite(service.host, service.ip);
+                            else if (service.type === "api") responseTime = await checkApi(service.host, service.ip);
                             else if (service.type === "gateway") responseTime = await checkWs(service.host);
+                            else if (service.type === "minecraft") responseTime = await checkMinecraft(service.host);
                         } catch (error) {
                             checks.push({ serviceId: service.service_id, online: false, error });
                             return;

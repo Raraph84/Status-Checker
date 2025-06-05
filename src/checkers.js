@@ -1,14 +1,30 @@
-const { request: httpsRequest } = require("https");
-const { request: httpRequest } = require("http");
 const { pingWithPromise } = require("minecraft-ping-js");
+const url = require("url");
+const http = require("http");
+const https = require("https");
 const Ws = require("ws");
 
-const checkWebsite = (host) =>
+const genHttpOptions = (host, ip) => {
+    const hostUrl = new URL(host);
+    const options = {
+        ...url.urlToHttpOptions(hostUrl), // Used in http.request(url)
+        hostname: ip, // Use already resolved IP
+        headers: { host: hostUrl.hostname }, // Set the Host header to the original hostname instead of the IP
+        agent: false // Create new agent to avoid ping measurement issues by not reusing already created agent
+    };
+    if (hostUrl.protocol === "https:") {
+        options._defaultAgent = https.globalAgent; // Used in https.request
+        options.servername = hostUrl.hostname; // Fixes TLS
+    }
+    return options;
+};
+
+const checkWebsite = (host, ip) =>
     new Promise((resolve, reject) => {
         let finishDate = 0;
         let responseDate = 0;
 
-        const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
+        const req = http.request(genHttpOptions(host, ip));
         req.on("socket", (socket) => {
             socket.on("connect", () => (finishDate = process.hrtime.bigint()));
             socket.on("secureConnect", () => (finishDate = process.hrtime.bigint()));
@@ -31,12 +47,12 @@ const checkWebsite = (host) =>
         setTimeout(() => reject(new Error("timeout")), 10000);
     });
 
-const checkApi = (host) =>
+const checkApi = (host, ip) =>
     new Promise((resolve, reject) => {
         let finishDate = 0;
         let responseDate = 0;
 
-        const req = (host.startsWith("https") ? httpsRequest : httpRequest)(host, { agent: false });
+        const req = http.request(genHttpOptions(host, ip));
         req.on("socket", (socket) => {
             socket.on("connect", () => (finishDate = process.hrtime.bigint()));
             socket.on("secureConnect", () => (finishDate = process.hrtime.bigint()));
