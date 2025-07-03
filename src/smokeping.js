@@ -128,13 +128,13 @@ const smokeping = async (database, checker) => {
             const max = latencies.length ? Math.max(...latencies) : null;
             const lost = check.pings.length - latencies.length || null;
 
-            inserts.push([check.service.service_id, config.checkerId, check.time, 1, 5, downs, med, min, max, lost]);
+            inserts.push([check.service.service_id, config.checkerId, check.time, 1, 1, downs, med, min, max, lost]);
         }
 
         let failed = false;
         try {
             await database.query(
-                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
+                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
                     inserts.map(() => "(?)").join(", ") +
                     " ON DUPLICATE KEY UPDATE service_id=service_id",
                 inserts
@@ -149,7 +149,7 @@ const smokeping = async (database, checker) => {
             for (const insert of inserts) {
                 try {
                     await tempDatabase.run(
-                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         insert
                     );
                 } catch (error) {
@@ -284,7 +284,7 @@ const aggregate = async (database) => {
         const inserts = [];
         for (const service of services) {
             for (const startTime of service.startTimes) {
-                const sent = startTime.pings.reduce((acc, ping) => acc + ping.sent, 0);
+                const checks = startTime.pings.reduce((acc, ping) => acc + ping.checks, 0);
                 const downs = startTime.pings.reduce((acc, ping) => acc + (ping.downs ?? 0), 0) || null;
                 const working = startTime.pings.filter((ping) => ping.med_response_time);
                 const med = working.length
@@ -303,7 +303,7 @@ const aggregate = async (database) => {
                     config.checkerId,
                     startTime.startTime,
                     aggregation.duration,
-                    sent,
+                    checks,
                     downs,
                     med,
                     min,
@@ -317,7 +317,7 @@ const aggregate = async (database) => {
             while (inserts.length) {
                 const list = inserts.splice(0, 1000);
                 await database.query(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, sent, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
+                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
                         list.map(() => "(?)").join(", ") +
                         " ON DUPLICATE KEY UPDATE service_id=service_id",
                     list
