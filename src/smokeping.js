@@ -170,6 +170,7 @@ const smokeping = async (database, checker) => {
 
             if (offlineChecks.length) {
                 const everyone = offlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+                const content = `${everyone}**${offlineChecks.length} Service${offlineChecks.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}`;
                 const embeds = splitEmbed({
                     title: `Services hors ligne pour ${checker.name} ${checker.location}`,
                     description: offlineChecks
@@ -184,10 +185,11 @@ const smokeping = async (database, checker) => {
                     color: (0xff0000).toString()
                 });
                 try {
-                    await alert({
-                        content: `${everyone}**${offlineChecks.length} Service${offlineChecks.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}`
-                    });
-                    for (const embed of embeds) await alert({ embeds: [embed] });
+                    for (const embed of embeds)
+                        await alert({
+                            ...(embeds.indexOf(embed) === 0 ? { content } : {}),
+                            embeds: [embed]
+                        });
                 } catch (error) {
                     console.log("Cannot send alert - " + error);
                 }
@@ -195,6 +197,7 @@ const smokeping = async (database, checker) => {
 
             if (onlineChecks.length) {
                 const everyone = onlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+                const content = `${everyone}**${onlineChecks.length} Service${onlineChecks.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}`;
                 const embeds = splitEmbed({
                     title: `Services en ligne pour ${checker.name} ${checker.location}`,
                     description: onlineChecks
@@ -206,10 +209,11 @@ const smokeping = async (database, checker) => {
                     color: (0x00ff00).toString()
                 });
                 try {
-                    await alert({
-                        content: `${everyone}**${onlineChecks.length} Service${onlineChecks.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}`
-                    });
-                    for (const embed of embeds) await alert({ embeds: [embed] });
+                    for (const embed of embeds)
+                        await alert({
+                            ...(embeds.indexOf(embed) === 0 ? { content } : {}),
+                            embeds: [embed]
+                        });
                 } catch (error) {
                     console.log("Cannot send alert - " + error);
                 }
