@@ -1,7 +1,5 @@
-const { getConfig } = require("raraph84-lib");
 const { promises: dns } = require("dns");
 const net = require("net");
-const config = getConfig(__dirname + "/..");
 
 let services = [];
 module.exports.getServices = () => services;
@@ -17,7 +15,7 @@ module.exports.init = async (database) => {
         try {
             [rawServices] = await database.query(
                 "SELECT DISTINCT services.* FROM groups_services INNER JOIN services ON groups_services.service_id=services.service_id WHERE group_id IN (SELECT group_id FROM groups_checkers WHERE checker_id=?)",
-                [config.checkerId]
+                [process.env.CHECKER_ID]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);

@@ -1,15 +1,16 @@
 const { createPool } = require("mysql2/promise");
-const { getConfig, TaskManager } = require("raraph84-lib");
-const config = getConfig(__dirname);
+const { TaskManager } = require("raraph84-lib");
 
 require("dotenv").config({ path: [".env.local", ".env"] });
 
 const tasks = new TaskManager();
 
 const database = createPool({
+    host: process.env.DATABASE_HOST,
+    user: process.env.DATABASE_USER,
     password: process.env.DATABASE_PASSWORD,
-    charset: "utf8mb4_general_ci",
-    ...config.database
+    database: process.env.DATABASE_NAME,
+    charset: "utf8mb4_general_ci"
 });
 tasks.addTask(
     (resolve, reject) => {

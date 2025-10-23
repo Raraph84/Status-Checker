@@ -1,5 +1,4 @@
 node_modules/
-config.dev.json
 .env
 .env.local
 temp.db

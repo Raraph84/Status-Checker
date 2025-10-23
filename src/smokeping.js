@@ -1,8 +1,6 @@
-const { getConfig } = require("raraph84-lib");
 const { median, alert, splitEmbed } = require("./utils");
 const net = require("net");
 const ping = require("net-ping");
-const config = getConfig(__dirname + "/..");
 
 const aggregations = [
     { duration: 1, storage: 7 }, // 10s for 1 week
@@ -21,7 +19,7 @@ let aggregateInterval = null;
 module.exports.init = async (database) => {
     let checker;
     try {
-        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
+        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [process.env.CHECKER_ID]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         throw error;
@@ -128,7 +126,7 @@ const smokeping = async (database, checker) => {
             const max = latencies.length ? Math.max(...latencies) : null;
             const lost = check.pings.length - latencies.length || null;
 
-            inserts.push([check.service.service_id, config.checkerId, check.time, 1, 1, downs, med, min, max, lost]);
+            inserts.push([check.service.service_id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
         }
 
         let failed = false;
@@ -261,7 +259,7 @@ const aggregate = async (database) => {
         try {
             [pings] = await database.query(
                 "SELECT * FROM services_smokeping WHERE checker_id=? AND start_time<? AND duration=?",
-                [config.checkerId, startTime, prevAggregation.duration]
+                [process.env.CHECKER_ID, startTime, prevAggregation.duration]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
@@ -304,7 +302,7 @@ const aggregate = async (database) => {
 
                 inserts.push([
                     service.id,
-                    config.checkerId,
+                    process.env.CHECKER_ID,
                     startTime.startTime,
                     aggregation.duration,
                     checks,
@@ -328,7 +326,7 @@ const aggregate = async (database) => {
                 );
             }
             await database.query("DELETE FROM services_smokeping WHERE checker_id=? AND start_time<? AND duration=?", [
-                config.checkerId,
+                process.env.CHECKER_ID,
                 startTime,
                 prevAggregation.duration
             ]);
@@ -362,7 +360,7 @@ const getServicesStates = async (database, servicesId) => {
 
     let lastPings;
     try {
-        [lastPings] = await database.query(sql, [servicesId, config.checkerId]);
+        [lastPings] = await database.query(sql, [servicesId, process.env.CHECKER_ID]);
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         throw new Error("Database error");

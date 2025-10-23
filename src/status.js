@@ -1,7 +1,5 @@
-const { getConfig } = require("raraph84-lib");
 const { checkWebsite, checkMinecraft, checkApi, checkWs } = require("./checkers");
 const { limits, alert, splitEmbed } = require("./utils");
-const config = getConfig(__dirname + "/..");
 
 let checkInterval = null;
 
@@ -11,7 +9,7 @@ let checkInterval = null;
 module.exports.init = async (database) => {
     let checker;
     try {
-        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [config.checkerId]))[0][0];
+        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [process.env.CHECKER_ID]))[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         throw error;
@@ -184,7 +182,7 @@ const getLastStatus = async (database, service) => {
         lastEvent = (
             await database.query(
                 "SELECT * FROM services_events WHERE service_id=? && checker_id=? ORDER BY minute DESC LIMIT 1",
-                [service.service_id, config.checkerId]
+                [service.service_id, process.env.CHECKER_ID]
             )
         )[0][0];
     } catch (error) {
@@ -201,7 +199,7 @@ const serviceOnline = async (database, service, responseTime, currentMinute) => 
         try {
             await database.query(
                 "INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 1)",
-                [service.service_id, config.checkerId, currentMinute]
+                [service.service_id, process.env.CHECKER_ID, currentMinute]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
@@ -212,7 +210,7 @@ const serviceOnline = async (database, service, responseTime, currentMinute) => 
         try {
             await database.query(
                 "INSERT INTO services_statuses (service_id, checker_id, minute, online, response_time) VALUES (?, ?, ?, 1, ?)",
-                [service.service_id, config.checkerId, currentMinute, responseTime]
+                [service.service_id, process.env.CHECKER_ID, currentMinute, responseTime]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
@@ -229,7 +227,7 @@ const serviceOffline = async (database, service, currentMinute) => {
         try {
             await database.query(
                 "INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)",
-                [service.service_id, config.checkerId, currentMinute]
+                [service.service_id, process.env.CHECKER_ID, currentMinute]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
@@ -240,7 +238,7 @@ const serviceOffline = async (database, service, currentMinute) => {
         try {
             await database.query(
                 "INSERT INTO services_statuses (service_id, checker_id, minute, online) VALUES (?, ?, ?, 0)",
-                [service.service_id, config.checkerId, currentMinute]
+                [service.service_id, process.env.CHECKER_ID, currentMinute]
             );
         } catch (error) {
             console.log(`SQL Error - ${__filename} - ${error}`);
@@ -260,7 +258,7 @@ const updateDailyStatuses = async (database, service, currentDate) => {
         lastDailyStatus = (
             await database.query(
                 "SELECT * FROM services_daily_statuses WHERE service_id=? && checker_id=? ORDER BY day DESC LIMIT 1",
-                [service.service_id, config.checkerId]
+                [service.service_id, process.env.CHECKER_ID]
             )
         )[0][0];
     } catch (error) {
@@ -274,7 +272,7 @@ const updateDailyStatuses = async (database, service, currentDate) => {
     try {
         [statuses] = await database.query(
             "SELECT * FROM services_statuses WHERE service_id=? && checker_id=? && minute>=? && minute<?",
-            [service.service_id, config.checkerId, firstMinute, lastMinute]
+            [service.service_id, process.env.CHECKER_ID, firstMinute, lastMinute]
         );
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
@@ -295,11 +293,11 @@ const updateDailyStatuses = async (database, service, currentDate) => {
     try {
         await database.query(
             "INSERT INTO services_daily_statuses (service_id, checker_id, day, statuses_amount, uptime, response_time) VALUES (?, ?, ?, ?, ?, ?)",
-            [service.service_id, config.checkerId, day, statuses.length, uptime, responseTime]
+            [service.service_id, process.env.CHECKER_ID, day, statuses.length, uptime, responseTime]
         );
         await database.query("DELETE FROM services_statuses WHERE service_id=? && checker_id=? && minute<?", [
             service.service_id,
-            config.checkerId,
+            process.env.CHECKER_ID,
             firstMinute
         ]);
     } catch (error) {

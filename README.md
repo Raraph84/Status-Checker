@@ -23,9 +23,7 @@ npm install
 Create a new MySQL user with edit access to the database created for the API  
 Insert a new line in the `checkers` table with the settings you want
 
-Edit the `Status-Checker/config.json` to match your database host, username and database name, and update the checker id to match the one you created in the database
-
-Copy the `Status-Checker/.env.example` to `Status-Checker/.env` and fill it with your database password, and a Discord webhook URL to alert you when a service is up or down
+Copy the `Status-Checker/.env.example` to `Status-Checker/.env` and fill it with your database credentials, a Discord webhook URL to alert you when a service is up or down, and the checker id to match the one you created in the database
 
 Then start the checker by running:
 
