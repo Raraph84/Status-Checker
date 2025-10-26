@@ -96,6 +96,8 @@ const checkServices = async (database, checker) => {
                         : check.error.toString())
         );
 
+    const checkDuration = (Date.now() - currentDate) / 1000;
+
     const onlineAlerts = [];
     const offlineAlerts = [];
     const stillDown = [];
@@ -105,7 +107,7 @@ const checkServices = async (database, checker) => {
         if (!check) throw new Error("Service " + service.service_id + " not checked.");
         const alreadyOnline = await getLastStatus(database, service);
 
-        if (check.online !== alreadyOnline) {
+        if (alreadyOnline !== null && check.online !== alreadyOnline) {
             try {
                 await database.query(
                     "INSERT INTO services_events (service_id, checker_id, minute, online) VALUES (?, ?, ?, ?)",
@@ -114,6 +116,8 @@ const checkServices = async (database, checker) => {
             } catch (error) {
                 console.log(`SQL Error - ${__filename} - ${error}`);
             }
+            if (check.online) onlineAlerts.push(service);
+            if (!check.online) offlineAlerts.push({ ...service, error: check.error });
         }
 
         if (!service.disabled) {
@@ -125,19 +129,11 @@ const checkServices = async (database, checker) => {
             } catch (error) {
                 console.log(`SQL Error - ${__filename} - ${error}`);
             }
-        }
-
-        if (check.online) {
-            if (!alreadyOnline) onlineAlerts.push(service);
-        } else {
-            if (alreadyOnline) offlineAlerts.push({ ...service, error: check.error });
-            if (!service.disabled) stillDown.push(service);
+            if (!check.online) stillDown.push(service);
         }
 
         await updateDailyStatuses(database, service, currentDate);
     }
-
-    const checkDuration = (Date.now() - currentDate) / 1000;
 
     if (offlineAlerts.length > 0) {
         const everyone = offlineAlerts.some((service) => service.alert) ? "@everyone " : "";
@@ -210,7 +206,7 @@ const getLastStatus = async (database, service) => {
         console.log(`SQL Error - ${__filename} - ${error}`);
     }
 
-    return !!lastEvent?.online || false;
+    return !!lastEvent?.online ?? null;
 };
 
 const updateDailyStatuses = async (database, service, currentDate) => {
