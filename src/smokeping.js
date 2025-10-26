@@ -106,116 +106,115 @@ const smokeping = async (database, checker) => {
         }
     }
 
-    if (checks.length) {
-        let states = null;
+    if (!checks.length) return;
+
+    const inserts = [];
+    for (const check of checks) {
+        const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
+        const downs = latencies.length ? null : 1;
+        const med = latencies.length ? median(latencies) : null;
+        const min = latencies.length ? Math.min(...latencies) : null;
+        const max = latencies.length ? Math.max(...latencies) : null;
+        const lost = check.pings.length - latencies.length || null;
+
+        inserts.push([check.service.service_id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
+    }
+
+    let failed = false;
+    try {
+        await database.query(
+            "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
+                inserts.map(() => "(?)").join(", ") +
+                " ON DUPLICATE KEY UPDATE service_id=service_id",
+            inserts
+        );
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        failed = true;
+    }
+
+    if (failed) {
+        const tempDatabase = require("./database").getTempDatabase();
+        for (const insert of inserts) {
+            try {
+                await tempDatabase.run(
+                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    insert
+                );
+            } catch (error) {
+                console.log(`SQL Error - ${__filename} - ${error}`);
+            }
+        }
+    }
+
+    let states;
+    try {
+        states = await getServicesStates(
+            database,
+            checks.map((check) => check.service.service_id)
+        );
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        return;
+    }
+
+    const offlineChecks = [];
+    const onlineChecks = [];
+    for (const check of checks) {
+        const oldUp = states.find((state) => state.service === check.service.service_id)?.online ?? false;
+        const up = check.pings.some((ping) => ping.latency);
+        if (up && !oldUp) onlineChecks.push(check);
+        else if (!up && oldUp) offlineChecks.push(check);
+    }
+
+    if (offlineChecks.length) {
+        const everyone = offlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+        const content = `${everyone}**${offlineChecks.length} Service${offlineChecks.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}`;
+        const embeds = splitEmbed({
+            title: `Services hors ligne pour ${checker.name} ${checker.location}`,
+            description: offlineChecks
+                .map((check) => {
+                    const failedPing =
+                        check.pings.find((ping) => ping.error && ping.error.name !== "RequestTimedOutError") ??
+                        check.pings.find((ping) => ping.error);
+                    return `:warning: **Le service **\`${check.service.name}\`** est hors ligne.**\n${failedPing.error.toString()}`;
+                })
+                .join("\n"),
+            timestamp: new Date(offlineChecks[0].time * 10 * 1000),
+            color: (0xff0000).toString()
+        });
         try {
-            states = await getServicesStates(
-                database,
-                checks.map((check) => check.service.service_id)
-            );
+            for (const embed of embeds)
+                await alert({
+                    ...(embeds.indexOf(embed) === 0 ? { content } : {}),
+                    embeds: [embed]
+                });
         } catch (error) {
-            console.log(`SQL Error - ${__filename} - ${error}`);
+            console.log("Cannot send alert - " + error);
         }
+    }
 
-        const inserts = [];
-        for (const check of checks) {
-            const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
-            const downs = latencies.length ? null : 1;
-            const med = latencies.length ? median(latencies) : null;
-            const min = latencies.length ? Math.min(...latencies) : null;
-            const max = latencies.length ? Math.max(...latencies) : null;
-            const lost = check.pings.length - latencies.length || null;
-
-            inserts.push([check.service.service_id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
-        }
-
-        let failed = false;
+    if (onlineChecks.length) {
+        const everyone = onlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+        const content = `${everyone}**${onlineChecks.length} Service${onlineChecks.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}`;
+        const embeds = splitEmbed({
+            title: `Services en ligne pour ${checker.name} ${checker.location}`,
+            description: onlineChecks
+                .map((check) => {
+                    return `:warning: **Le service **\`${check.service.name}\`** est de nouveau en ligne.**`;
+                })
+                .join("\n"),
+            timestamp: new Date(onlineChecks[0].time * 10 * 1000),
+            color: (0x00ff00).toString()
+        });
         try {
-            await database.query(
-                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
-                    inserts.map(() => "(?)").join(", ") +
-                    " ON DUPLICATE KEY UPDATE service_id=service_id",
-                inserts
-            );
+            for (const embed of embeds)
+                await alert({
+                    ...(embeds.indexOf(embed) === 0 ? { content } : {}),
+                    embeds: [embed]
+                });
         } catch (error) {
-            console.log(`SQL Error - ${__filename} - ${error}`);
-            failed = true;
-        }
-
-        if (failed) {
-            const tempDatabase = require("./database").getTempDatabase();
-            for (const insert of inserts) {
-                try {
-                    await tempDatabase.run(
-                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        insert
-                    );
-                } catch (error) {
-                    console.log(`SQL Error - ${__filename} - ${error}`);
-                }
-            }
-        }
-
-        if (states) {
-            const offlineChecks = [];
-            const onlineChecks = [];
-            for (const check of checks) {
-                const oldUp = states.find((state) => state.service === check.service.service_id)?.online ?? false;
-                const up = check.pings.some((ping) => ping.latency);
-                if (up && !oldUp) onlineChecks.push(check);
-                else if (!up && oldUp) offlineChecks.push(check);
-            }
-
-            if (offlineChecks.length) {
-                const everyone = offlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
-                const content = `${everyone}**${offlineChecks.length} Service${offlineChecks.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}`;
-                const embeds = splitEmbed({
-                    title: `Services hors ligne pour ${checker.name} ${checker.location}`,
-                    description: offlineChecks
-                        .map((check) => {
-                            const failedPing =
-                                check.pings.find((ping) => ping.error && ping.error.name !== "RequestTimedOutError") ??
-                                check.pings.find((ping) => ping.error);
-                            return `:warning: **Le service **\`${check.service.name}\`** est hors ligne.**\n${failedPing.error.toString()}`;
-                        })
-                        .join("\n"),
-                    timestamp: new Date(offlineChecks[0].time * 10 * 1000),
-                    color: (0xff0000).toString()
-                });
-                try {
-                    for (const embed of embeds)
-                        await alert({
-                            ...(embeds.indexOf(embed) === 0 ? { content } : {}),
-                            embeds: [embed]
-                        });
-                } catch (error) {
-                    console.log("Cannot send alert - " + error);
-                }
-            }
-
-            if (onlineChecks.length) {
-                const everyone = onlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
-                const content = `${everyone}**${onlineChecks.length} Service${onlineChecks.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}`;
-                const embeds = splitEmbed({
-                    title: `Services en ligne pour ${checker.name} ${checker.location}`,
-                    description: onlineChecks
-                        .map((check) => {
-                            return `:warning: **Le service **\`${check.service.name}\`** est de nouveau en ligne.**`;
-                        })
-                        .join("\n"),
-                    timestamp: new Date(onlineChecks[0].time * 10 * 1000),
-                    color: (0x00ff00).toString()
-                });
-                try {
-                    for (const embed of embeds)
-                        await alert({
-                            ...(embeds.indexOf(embed) === 0 ? { content } : {}),
-                            embeds: [embed]
-                        });
-                } catch (error) {
-                    console.log("Cannot send alert - " + error);
-                }
-            }
+            console.log("Cannot send alert - " + error);
         }
     }
 };

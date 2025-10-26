@@ -7,17 +7,17 @@
   "author": "Raraph84",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^16.5.0",
+    "dotenv": "^17.2.3",
     "minecraft-ping-js": "^1.0.2",
-    "mysql2": "^3.14.1",
-    "net-ping": "github:Raraph84/node-net-ping-nanos",
-    "raraph84-lib": "^2.20.0",
+    "mysql2": "^3.15.3",
+    "net-ping": "github:Raraph84/node-net-ping-micros",
+    "raraph84-lib": "^2.21.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "ws": "^8.18.2"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
-    "prettier": "^3.5.3"
+    "prettier": "^3.6.2"
   },
   "prettier": {
     "tabWidth": 4,

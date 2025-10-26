@@ -1,7 +1,7 @@
 const { createPool } = require("mysql2/promise");
 const { TaskManager } = require("raraph84-lib");
 
-require("dotenv").config({ path: [".env.local", ".env"] });
+require("dotenv").config({ path: [".env.local", ".env"], quiet: true });
 
 const tasks = new TaskManager();
 
