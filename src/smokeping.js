@@ -108,6 +108,16 @@ const smokeping = async (database, checker) => {
 
     if (!checks.length) return;
 
+    let states;
+    try {
+        states = await getServicesStates(
+            database,
+            checks.map((check) => check.service.service_id)
+        );
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+    }
+
     const inserts = [];
     for (const check of checks) {
         const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
@@ -147,16 +157,7 @@ const smokeping = async (database, checker) => {
         }
     }
 
-    let states;
-    try {
-        states = await getServicesStates(
-            database,
-            checks.map((check) => check.service.service_id)
-        );
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        return;
-    }
+    if (!states) return;
 
     const offlineChecks = [];
     const onlineChecks = [];
