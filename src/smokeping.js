@@ -40,7 +40,7 @@ module.exports.stop = async () => {
 
 /** @type {{ time: number; id: string; latency: number | null; error: any | null; }[]} */
 let pings = [];
-/** @type {{ id: number; service: any; ip: string; }[]} */
+/** @type {{ id: number; service: any; ip: string; lastState: boolean }[]} */
 let smokepingServices = [];
 
 const v4session = new ping.Session({
@@ -108,16 +108,6 @@ const smokeping = async (database, checker) => {
 
     if (!checks.length) return;
 
-    let states;
-    try {
-        states = await getServicesStates(
-            database,
-            checks.map((check) => check.service.service_id)
-        );
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-    }
-
     const inserts = [];
     for (const check of checks) {
         const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
@@ -157,15 +147,15 @@ const smokeping = async (database, checker) => {
         }
     }
 
-    if (!states) return;
-
     const offlineChecks = [];
     const onlineChecks = [];
     for (const check of checks) {
-        const oldUp = states.find((state) => state.service === check.service.service_id)?.online ?? false;
+        const service = smokepingServices.find((s) => s.id === check.service.service_id);
         const up = check.pings.some((ping) => ping.latency);
-        if (up && !oldUp) onlineChecks.push(check);
-        else if (!up && oldUp) offlineChecks.push(check);
+        if (up === service.lastState) continue;
+        service.lastState = up;
+        if (up) onlineChecks.push(check);
+        else offlineChecks.push(check);
     }
 
     if (offlineChecks.length) {
@@ -233,7 +223,7 @@ module.exports.updateServices = () => {
         if (old) {
             old.ip = service.ip;
             old.service = service;
-        } else smokepingServices.push({ id: service.service_id, service, ip: service.ip });
+        } else smokepingServices.push({ id: service.service_id, service, ip: service.ip, lastState: true });
     }
 };
 
@@ -339,32 +329,4 @@ const aggregate = async (database) => {
 
     console.log("Aggregated smokeping data.");
     aggregating = false;
-};
-
-/**
- * @param {import("mysql2/promise").Pool} database
- * @param {number[]} servicesId
- * @return {Promise<{ service: number; online: boolean }[]>}
- */
-const getServicesStates = async (database, servicesId) => {
-    let subsql = "SELECT service_id, checker_id, MAX(start_time) AS start_time";
-    subsql += " FROM services_smokeping";
-    subsql += " WHERE service_id IN (?) AND checker_id=?";
-    subsql += " GROUP BY service_id";
-
-    let sql = "SELECT services_smokeping.service_id, services_smokeping.downs";
-    sql += " FROM services_smokeping";
-    sql += " JOIN (" + subsql + ") latest";
-    sql += " ON services_smokeping.checker_id=latest.checker_id AND services_smokeping.service_id=latest.service_id";
-    sql += " AND services_smokeping.start_time=latest.start_time";
-
-    let lastPings;
-    try {
-        [lastPings] = await database.query(sql, [servicesId, process.env.CHECKER_ID]);
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        throw new Error("Database error");
-    }
-
-    return lastPings.map((lastPing) => ({ service: lastPing.service_id, online: !lastPing.downs }));
 };
