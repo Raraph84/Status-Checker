@@ -120,32 +120,32 @@ const smokeping = async (database, checker) => {
         inserts.push([check.service.service_id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
     }
 
-    let failed = false;
-    try {
-        await database.query(
-            "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
-                inserts.map(() => "(?)").join(", ") +
-                " ON DUPLICATE KEY UPDATE service_id=service_id",
-            inserts
-        );
-    } catch (error) {
-        console.log(`SQL Error - ${__filename} - ${error}`);
-        failed = true;
-    }
+    (async () => {
+        let failed = false;
+        try {
+            await database.query(
+                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES ? ON DUPLICATE KEY UPDATE service_id=service_id",
+                [inserts]
+            );
+        } catch (error) {
+            console.log(`SQL Error - ${__filename} - ${error}`);
+            failed = true;
+        }
 
-    if (failed) {
-        const tempDatabase = require("./database").getTempDatabase();
-        for (const insert of inserts) {
-            try {
-                await tempDatabase.run(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    insert
-                );
-            } catch (error) {
-                console.log(`SQL Error - ${__filename} - ${error}`);
+        if (failed) {
+            const tempDatabase = require("./database").getTempDatabase();
+            for (const insert of inserts) {
+                try {
+                    await tempDatabase.run(
+                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        insert
+                    );
+                } catch (error) {
+                    console.log(`SQL Error - ${__filename} - ${error}`);
+                }
             }
         }
-    }
+    })();
 
     const offlineChecks = [];
     const onlineChecks = [];
@@ -210,10 +210,8 @@ const smokeping = async (database, checker) => {
     }
 };
 
-module.exports.updateServices = () => {
-    const services = require("./services")
-        .getServices()
-        .filter((service) => service.type === "server" && !service.disabled);
+module.exports.updateServices = (newServices) => {
+    const services = newServices.filter((service) => service.type === "server" && !service.disabled);
 
     smokepingServices = smokepingServices.filter((service) => services.some((s) => service.id === s.service_id));
 
@@ -307,12 +305,9 @@ const aggregate = async (database) => {
 
         try {
             while (inserts.length) {
-                const list = inserts.splice(0, 1000);
                 await database.query(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES " +
-                        list.map(() => "(?)").join(", ") +
-                        " ON DUPLICATE KEY UPDATE service_id=service_id",
-                    list
+                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES ? ON DUPLICATE KEY UPDATE service_id=service_id",
+                    [inserts.splice(0, 1000)]
                 );
             }
             await database.query("DELETE FROM services_smokeping WHERE checker_id=? AND start_time<? AND duration=?", [

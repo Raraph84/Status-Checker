@@ -105,7 +105,7 @@ module.exports.init = async (database) => {
 
         services = newServices;
 
-        require("./smokeping").updateServices();
+        require("./smokeping").updateServices(services);
     };
 
     await update();
