@@ -38,9 +38,17 @@ module.exports.stop = async () => {
     clearInterval(aggregateInterval);
 };
 
-/** @type {{ time: number; id: string; latency: number | null; error: any | null; }[]} */
+/**
+ * @typedef {object} SmokepingService
+ * @property {number} id
+ * @property {object} service
+ * @property {string} ip
+ * @property {boolean} lastState
+ */
+
+/** @type {{ time: number; service: SmokepingService; latency: number | null; error: any | null; }[]} */
 let pings = [];
-/** @type {{ id: number; service: any; ip: string; lastState: boolean }[]} */
+/** @type {SmokepingService[]} */
 let smokepingServices = [];
 
 const v4session = new ping.Session({
@@ -70,14 +78,8 @@ const smokeping = async (database, checker) => {
             () => {
                 const session = net.isIPv4(service.ip) ? v4session : v6session;
                 session.pingHost(service.ip, (error, _target, sent, rcvd) => {
-                    if (error) pings.push({ time, id: service.id, latency: null, error });
-                    else
-                        pings.push({
-                            time,
-                            id: service.id,
-                            latency: Math.round(Number(rcvd - sent) / 10),
-                            error: null
-                        });
+                    if (error) pings.push({ time, service, latency: null, error });
+                    else pings.push({ time, service, latency: Math.round(Number(rcvd - sent) / 10), error: null });
                 });
             },
             (2000 / smokepingServices.length) * i
@@ -93,13 +95,12 @@ const smokeping = async (database, checker) => {
         const timePings = pings.filter((ping) => ping.time === time);
         pings = pings.filter((ping) => ping.time !== time);
 
-        const services = timePings.map((service) => service.id).filter((s, i, a) => a.indexOf(s) === i);
+        const services = timePings.map((service) => service.service.id).filter((s, i, a) => a.indexOf(s) === i);
         for (const service of services) {
-            const servicePings = timePings.filter((ping) => ping.id === service);
+            const servicePings = timePings.filter((ping) => ping.service.id === service);
             if (servicePings.length !== 5) continue;
-
             checks.push({
-                service: smokepingServices.find((s) => s.id === service).service,
+                service: servicePings[0].service,
                 time,
                 pings: servicePings.map((ping) => ({ latency: ping.latency, error: ping.error }))
             });
@@ -117,7 +118,7 @@ const smokeping = async (database, checker) => {
         const max = latencies.length ? Math.max(...latencies) : null;
         const lost = check.pings.length - latencies.length || null;
 
-        inserts.push([check.service.service_id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
+        inserts.push([check.service.id, process.env.CHECKER_ID, check.time, 1, 1, downs, med, min, max, lost]);
     }
 
     (async () => {
@@ -150,16 +151,15 @@ const smokeping = async (database, checker) => {
     const offlineChecks = [];
     const onlineChecks = [];
     for (const check of checks) {
-        const service = smokepingServices.find((s) => s.id === check.service.service_id);
         const up = check.pings.some((ping) => ping.latency);
-        if (up === service.lastState) continue;
-        service.lastState = up;
+        if (up === check.service.lastState) continue;
+        check.service.lastState = up;
         if (up) onlineChecks.push(check);
         else offlineChecks.push(check);
     }
 
     if (offlineChecks.length) {
-        const everyone = offlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+        const everyone = offlineChecks.some((check) => check.service.service.alert) ? "@everyone " : "";
         const content = `${everyone}**${offlineChecks.length} Service${offlineChecks.length > 1 ? "s" : ""} hors ligne** pour ${checker.name} ${checker.location}`;
         const embeds = splitEmbed({
             title: `Services hors ligne pour ${checker.name} ${checker.location}`,
@@ -168,7 +168,7 @@ const smokeping = async (database, checker) => {
                     const failedPing =
                         check.pings.find((ping) => ping.error && ping.error.name !== "RequestTimedOutError") ??
                         check.pings.find((ping) => ping.error);
-                    return `:warning: **Le service **\`${check.service.name}\`** est hors ligne.**\n${failedPing.error.toString()}`;
+                    return `:warning: **Le service **\`${check.service.service.name}\`** est hors ligne.**\n${failedPing.error.toString()}`;
                 })
                 .join("\n"),
             timestamp: new Date(offlineChecks[0].time * 10 * 1000),
@@ -186,13 +186,13 @@ const smokeping = async (database, checker) => {
     }
 
     if (onlineChecks.length) {
-        const everyone = onlineChecks.some((check) => check.service.alert) ? "@everyone " : "";
+        const everyone = onlineChecks.some((check) => check.service.service.alert) ? "@everyone " : "";
         const content = `${everyone}**${onlineChecks.length} Service${onlineChecks.length > 1 ? "s" : ""} en ligne** pour ${checker.name} ${checker.location}`;
         const embeds = splitEmbed({
             title: `Services en ligne pour ${checker.name} ${checker.location}`,
             description: onlineChecks
                 .map((check) => {
-                    return `:warning: **Le service **\`${check.service.name}\`** est de nouveau en ligne.**`;
+                    return `:warning: **Le service **\`${check.service.service.name}\`** est de nouveau en ligne.**`;
                 })
                 .join("\n"),
             timestamp: new Date(onlineChecks[0].time * 10 * 1000),
