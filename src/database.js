@@ -40,34 +40,63 @@ const save = async (database) => {
     if (saving) return;
     saving = true;
 
-    const pings = await tempDatabase.all("SELECT * FROM services_smokeping");
+    let services;
+    try {
+        services = await tempDatabase.all("SELECT DISTINCT service_id FROM services_smokeping");
+    } catch (error) {
+        console.log(`SQL Error - ${__filename} - ${error}`);
+        saving = false;
+        return;
+    }
 
-    for (const ping of pings) {
-        try {
-            await database.query(
-                "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE service_id=service_id",
-                [
-                    ping.service_id,
-                    ping.checker_id,
-                    ping.start_time,
-                    ping.duration,
-                    ping.checks,
-                    ping.downs,
-                    ping.med_response_time,
-                    ping.min_response_time,
-                    ping.max_response_time,
-                    ping.lost
-                ]
-            );
-        } catch (error) {
-            console.log(`SQL Error - ${__filename} - ${error}`);
-            continue;
+    for (const { service_id: serviceId } of services) {
+        while (true) {
+            let pings;
+            try {
+                pings = await tempDatabase.all(
+                    "SELECT * FROM services_smokeping WHERE service_id=? ORDER BY start_time LIMIT 100",
+                    [serviceId]
+                );
+            } catch (error) {
+                console.log(`SQL Error - ${__filename} - ${error}`);
+                break;
+            }
+
+            if (!pings.length) break;
+
+            try {
+                await database.query(
+                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES ? ON DUPLICATE KEY UPDATE service_id=service_id",
+                    [
+                        pings.map((ping) => [
+                            ping.service_id,
+                            ping.checker_id,
+                            ping.start_time,
+                            ping.duration,
+                            ping.checks,
+                            ping.downs,
+                            ping.med_response_time,
+                            ping.min_response_time,
+                            ping.max_response_time,
+                            ping.lost
+                        ])
+                    ]
+                );
+            } catch (error) {
+                console.log(`SQL Error - ${__filename} - ${error}`);
+                break;
+            }
+
+            try {
+                await tempDatabase.run("DELETE FROM services_smokeping WHERE service_id=? AND start_time<=?", [
+                    serviceId,
+                    pings[pings.length - 1].start_time
+                ]);
+            } catch (error) {
+                console.log(`SQL Error - ${__filename} - ${error}`);
+                break;
+            }
         }
-
-        await tempDatabase.run("DELETE FROM services_smokeping WHERE service_id=? AND start_time=?", [
-            ping.service_id,
-            ping.start_time
-        ]);
     }
 
     saving = false;
