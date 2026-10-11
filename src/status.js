@@ -26,10 +26,6 @@ module.exports.init = async (database) => {
     }, 500);
 };
 
-module.exports.stop = async () => {
-    clearInterval(checkInterval);
-};
-
 const checkServices = async (database, checker) => {
     console.log("Checking services statuses...");
 

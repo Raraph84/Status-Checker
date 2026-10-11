@@ -111,7 +111,3 @@ module.exports.init = async (database) => {
     await update();
     updateInterval = setInterval(() => update().catch(() => {}), 60 * 1000);
 };
-
-module.exports.stop = async () => {
-    clearInterval(updateInterval);
-};

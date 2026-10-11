@@ -13,12 +13,13 @@ This is the monitoring part of my status system available at https://github.com/
 
 ### Preparing
 
-Clone the repo and install the libs by running:
+Clone the repo, install the libs and build the app by running:
 
 ```bash
 git clone https://github.com/Raraph84/Status-Checker
 cd Status-Checker/
 npm install
+npm run build
 ```
 
 Create a new MySQL user with edit access to the database for the checker  

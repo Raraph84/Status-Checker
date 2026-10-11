@@ -33,11 +33,6 @@ module.exports.init = async (database) => {
     aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
 };
 
-module.exports.stop = async () => {
-    clearInterval(smokepingInterval);
-    clearInterval(aggregateInterval);
-};
-
 /**
  * @typedef {object} SmokepingService
  * @property {number} id

@@ -23,11 +23,6 @@ export const init = async (database: Pool) => {
     saveInterval = setInterval(() => save(database), 5 * 60 * 1000);
 };
 
-export const stop = async () => {
-    clearInterval(saveInterval!);
-    await tempDatabase!.close();
-};
-
 let saving = false;
 
 const save = async (database: Pool) => {
