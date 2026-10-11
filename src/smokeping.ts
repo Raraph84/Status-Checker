@@ -1,5 +1,6 @@
-const { median, alert, splitEmbed } = require("./utils");
-const net = require("net");
+import { Pool, RowDataPacket } from "mysql2/promise";
+import net from "net";
+const { median, splitEmbed, alert } = require("./utils");
 const ping = require("net-ping");
 
 const aggregations = [
@@ -13,13 +14,12 @@ const aggregations = [
 let smokepingInterval = null;
 let aggregateInterval = null;
 
-/**
- * @param {import("mysql2/promise").Pool} database
- */
-module.exports.init = async (database) => {
+export const init = async (database: Pool) => {
     let checker;
     try {
-        checker = (await database.query("SELECT * FROM checkers WHERE checker_id=?", [process.env.CHECKER_ID]))[0][0];
+        checker = (
+            await database.query<RowDataPacket[]>("SELECT * FROM checkers WHERE checker_id=?", [process.env.CHECKER_ID])
+        )[0][0];
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         throw error;
@@ -33,18 +33,15 @@ module.exports.init = async (database) => {
     aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
 };
 
-/**
- * @typedef {object} SmokepingService
- * @property {number} id
- * @property {object} service
- * @property {string} ip
- * @property {boolean} lastState
- */
+type SmokepingService = {
+    id: number;
+    service: any;
+    ip: string;
+    lastState: boolean;
+};
 
-/** @type {{ time: number; service: SmokepingService; latency: number | null; error: any | null; }[]} */
-let pings = [];
-/** @type {SmokepingService[]} */
-let smokepingServices = [];
+let pings: { time: number; service: SmokepingService; latency: number | null; error: any | null }[] = [];
+let smokepingServices: SmokepingService[] = [];
 
 const v4session = new ping.Session({
     networkProtocol: ping.NetworkProtocol.IPv4,
@@ -62,17 +59,14 @@ const v6session = new ping.Session({
     retries: 0
 });
 
-/**
- * @param {import("mysql2/promise").Pool} database
- */
-const smokeping = async (database, checker) => {
+const smokeping = async (database: Pool, checker: any) => {
     const time = Math.floor(Date.now() / 1000 / 10);
 
     smokepingServices.forEach((service, i) =>
         setTimeout(
             () => {
                 const session = net.isIPv4(service.ip) ? v4session : v6session;
-                session.pingHost(service.ip, (error, _target, sent, rcvd) => {
+                session.pingHost(service.ip, (error: any, _target: any, sent: number, rcvd: number) => {
                     if (error) pings.push({ time, service, latency: null, error });
                     else pings.push({ time, service, latency: Math.round(Number(rcvd - sent) / 10), error: null });
                 });
@@ -95,7 +89,7 @@ const smokeping = async (database, checker) => {
             const servicePings = timePings.filter((ping) => ping.service.id === service);
             if (servicePings.length !== 5) continue;
             checks.push({
-                service: servicePings[0].service,
+                service: servicePings[0]!.service,
                 time,
                 pings: servicePings.map((ping) => ({ latency: ping.latency, error: ping.error }))
             });
@@ -106,7 +100,7 @@ const smokeping = async (database, checker) => {
 
     const inserts = [];
     for (const check of checks) {
-        const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency);
+        const latencies = check.pings.filter((ping) => ping.latency).map((ping) => ping.latency!);
         const downs = latencies.length ? null : 1;
         const med = latencies.length ? median(latencies) : null;
         const min = latencies.length ? Math.min(...latencies) : null;
@@ -162,11 +156,11 @@ const smokeping = async (database, checker) => {
                 .map((check) => {
                     const failedPing =
                         check.pings.find((ping) => ping.error && ping.error.name !== "RequestTimedOutError") ??
-                        check.pings.find((ping) => ping.error);
+                        check.pings.find((ping) => ping.error)!;
                     return `:warning: **Le service **\`${check.service.service.name}\`** est hors ligne.**\n${failedPing.error.toString()}`;
                 })
                 .join("\n"),
-            timestamp: new Date(offlineChecks[0].time * 10 * 1000),
+            timestamp: new Date(offlineChecks[0]!.time * 10 * 1000),
             color: (0xff0000).toString()
         });
         try {
@@ -190,7 +184,7 @@ const smokeping = async (database, checker) => {
                     return `:warning: **Le service **\`${check.service.service.name}\`** est de nouveau en ligne.**`;
                 })
                 .join("\n"),
-            timestamp: new Date(onlineChecks[0].time * 10 * 1000),
+            timestamp: new Date(onlineChecks[0]!.time * 10 * 1000),
             color: (0x00ff00).toString()
         });
         try {
@@ -205,7 +199,7 @@ const smokeping = async (database, checker) => {
     }
 };
 
-module.exports.updateServices = (newServices) => {
+export const updateServices = (newServices: any[]) => {
     const services = newServices.filter((service) => service.type === "server" && !service.disabled);
 
     smokepingServices = smokepingServices.filter((service) => services.some((s) => service.id === s.service_id));
@@ -222,10 +216,7 @@ module.exports.updateServices = (newServices) => {
 
 let aggregating = false;
 
-/**
- * @param {import("mysql2/promise").Pool} database
- */
-const aggregate = async (database) => {
+const aggregate = async (database: Pool) => {
     if (aggregating) return;
     aggregating = true;
 
@@ -234,13 +225,13 @@ const aggregate = async (database) => {
     const time = Math.floor(Date.now() / 1000 / 10);
 
     for (const aggregation of aggregations.slice(1)) {
-        const prevAggregation = aggregations[aggregations.indexOf(aggregation) - 1];
+        const prevAggregation = aggregations[aggregations.indexOf(aggregation) - 1]!;
         const startTime =
             Math.floor((time - prevAggregation.storage * 24 * 60 * 6) / aggregation.duration) * aggregation.duration;
 
         let pings;
         try {
-            [pings] = await database.query(
+            [pings] = await database.query<RowDataPacket[]>(
                 "SELECT * FROM services_smokeping WHERE checker_id=? AND start_time<? AND duration=?",
                 [process.env.CHECKER_ID, startTime, prevAggregation.duration]
             );
@@ -252,7 +243,7 @@ const aggregate = async (database) => {
 
         if (!pings.length) continue;
 
-        const services = [];
+        const services: { id: number; pings: any[]; startTimes: { startTime: number; pings: any[] }[] }[] = [];
         for (const ping of pings) {
             const service = services.find((service) => service.id === ping.service_id);
             const startTime = Math.floor(ping.start_time / aggregation.duration) * aggregation.duration;
