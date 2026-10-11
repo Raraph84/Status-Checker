@@ -1,6 +1,12 @@
 import { createPool } from "mysql2/promise";
+import * as sqlite from "sqlite";
+import sqlite3 from "sqlite3";
+import dotenv from "dotenv";
 
-require("dotenv").config({ path: [".env.local", ".env"], quiet: true });
+import * as databaseSaver from "./src/database";
+import * as smokeping from "./src/smokeping";
+
+dotenv.config({ path: [".env.local", ".env"], quiet: true });
 
 (async () => {
     const database = createPool({
@@ -20,8 +26,17 @@ require("dotenv").config({ path: [".env.local", ".env"], quiet: true });
         return;
     }
 
-    await require("./src/database").init(database);
+    let tempDatabase;
+    try {
+        tempDatabase = await sqlite.open({ filename: "temp.db", driver: sqlite3.Database });
+    } catch (error) {
+        console.log("Cannot open the temporary database - " + error);
+        database.end();
+        return;
+    }
+
+    await databaseSaver.init(database, tempDatabase);
     await require("./src/services").init(database);
     await require("./src/status").init(database);
-    await require("./src/smokeping").init(database);
+    await smokeping.init(database, tempDatabase);
 })();

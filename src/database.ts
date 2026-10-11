@@ -1,31 +1,20 @@
 import { Pool } from "mysql2/promise";
-import { Database } from "sqlite3";
-import * as sqlite from "sqlite";
-
-let tempDatabase: sqlite.Database | null = null;
-export const getTempDatabase = () => tempDatabase;
+import { Database } from "sqlite";
 
 let saveInterval: NodeJS.Timeout | null = null;
 
-export const init = async (database: Pool) => {
-    try {
-        tempDatabase = await sqlite.open({ filename: "temp.db", driver: Database });
-    } catch (error) {
-        console.log("Cannot open the temporary database - " + error);
-        throw error;
-    }
-
+export const init = async (database: Pool, tempDatabase: Database) => {
     await tempDatabase.run(
         "CREATE TABLE IF NOT EXISTS services_smokeping (service_id INTEGER NOT NULL, checker_id INTEGER NOT NULL, start_time INTEGER NOT NULL, duration INTEGER NOT NULL, checks INTEGER NOT NULL, downs INTEGER DEFAULT NULL, med_response_time INTEGER DEFAULT NULL, min_response_time INTEGER DEFAULT NULL, max_response_time INTEGER DEFAULT NULL, lost INTEGER DEFAULT NULL)"
     );
 
-    await save(database);
-    saveInterval = setInterval(() => save(database), 5 * 60 * 1000);
+    await save(database, tempDatabase);
+    saveInterval = setInterval(() => save(database, tempDatabase), 5 * 60 * 1000);
 };
 
 let saving = false;
 
-const save = async (database: Pool) => {
+const save = async (database: Pool, tempDatabase: Database) => {
     if (saving) return;
     saving = true;
 

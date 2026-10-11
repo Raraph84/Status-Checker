@@ -1,4 +1,5 @@
 import { Pool, RowDataPacket } from "mysql2/promise";
+import { Database } from "sqlite";
 import net from "net";
 const { median, splitEmbed, alert } = require("./utils");
 const ping = require("net-ping");
@@ -14,7 +15,7 @@ const aggregations = [
 let smokepingInterval = null;
 let aggregateInterval = null;
 
-export const init = async (database: Pool) => {
+export const init = async (database: Pool, tempDatabase: Database) => {
     let checker;
     try {
         checker = (
@@ -29,7 +30,7 @@ export const init = async (database: Pool) => {
 
     await aggregate(database);
 
-    smokepingInterval = setInterval(() => smokeping(database, checker), 2000);
+    smokepingInterval = setInterval(() => smokeping(database, tempDatabase, checker), 2000);
     aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
 };
 
@@ -59,7 +60,7 @@ const v6session = new ping.Session({
     retries: 0
 });
 
-const smokeping = async (database: Pool, checker: any) => {
+const smokeping = async (database: Pool, tempDatabase: Database, checker: any) => {
     const time = Math.floor(Date.now() / 1000 / 10);
 
     smokepingServices.forEach((service, i) =>
@@ -123,7 +124,6 @@ const smokeping = async (database: Pool, checker: any) => {
         }
 
         if (failed) {
-            const tempDatabase = require("./database").getTempDatabase();
             for (const insert of inserts) {
                 try {
                     await tempDatabase.run(
