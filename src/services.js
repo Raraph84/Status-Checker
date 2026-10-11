@@ -4,8 +4,6 @@ const net = require("net");
 let services = [];
 module.exports.getServices = () => services;
 
-let updateInterval = null;
-
 /**
  * @param {import("mysql2/promise").Pool} database
  */
@@ -109,5 +107,5 @@ module.exports.init = async (database) => {
     };
 
     await update();
-    updateInterval = setInterval(() => update().catch(() => {}), 60 * 1000);
+    setInterval(() => update().catch(() => {}), 60 * 1000);
 };

@@ -12,9 +12,6 @@ const aggregations = [
     { duration: 6 * 10, storage: 364 } // 10m for ~1 year
 ];
 
-let smokepingInterval = null;
-let aggregateInterval = null;
-
 export const init = async (database: Pool, tempDatabase: Database) => {
     let checker;
     try {
@@ -30,8 +27,8 @@ export const init = async (database: Pool, tempDatabase: Database) => {
 
     await aggregate(database);
 
-    smokepingInterval = setInterval(() => smokeping(database, tempDatabase, checker), 2000);
-    aggregateInterval = setInterval(() => aggregate(database), 10 * 60 * 1000);
+    setInterval(() => smokeping(database, tempDatabase, checker), 2000);
+    setInterval(() => aggregate(database), 10 * 60 * 1000);
 };
 
 type SmokepingService = {
@@ -257,8 +254,8 @@ const aggregate = async (database: Pool) => {
             }
         }
 
-        const inserts = [];
         for (const service of services) {
+            const inserts = [];
             for (const startTime of service.startTimes) {
                 const checks = startTime.pings.reduce((acc, ping) => acc + ping.checks, 0);
                 const downs = startTime.pings.reduce((acc, ping) => acc + (ping.downs ?? 0), 0) || null;
@@ -287,24 +284,23 @@ const aggregate = async (database: Pool) => {
                     lost
                 ]);
             }
-        }
 
-        try {
-            while (inserts.length) {
+            try {
+                while (inserts.length) {
+                    await database.query(
+                        "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES ? ON DUPLICATE KEY UPDATE service_id=service_id",
+                        [inserts.splice(0, 1000)]
+                    );
+                }
                 await database.query(
-                    "INSERT INTO services_smokeping (service_id, checker_id, start_time, duration, checks, downs, med_response_time, min_response_time, max_response_time, lost) VALUES ? ON DUPLICATE KEY UPDATE service_id=service_id",
-                    [inserts.splice(0, 1000)]
+                    "DELETE FROM services_smokeping WHERE checker_id=? AND service_id=? AND start_time<? AND duration=?",
+                    [process.env.CHECKER_ID, service.id, startTime, prevAggregation.duration]
                 );
+            } catch (error) {
+                console.log(`SQL Error - ${__filename} - ${error}`);
+                aggregating = false;
+                return;
             }
-            await database.query("DELETE FROM services_smokeping WHERE checker_id=? AND start_time<? AND duration=?", [
-                process.env.CHECKER_ID,
-                startTime,
-                prevAggregation.duration
-            ]);
-        } catch (error) {
-            console.log(`SQL Error - ${__filename} - ${error}`);
-            aggregating = false;
-            return;
         }
     }
 

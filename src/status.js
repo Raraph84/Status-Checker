@@ -1,8 +1,6 @@
 const { checkWebsite, checkMinecraft, checkApi, checkWs } = require("./checkers");
 const { limits, alert, splitEmbed } = require("./utils");
 
-let checkInterval = null;
-
 /**
  * @param {import("mysql2/promise").Pool} database
  */
@@ -18,7 +16,7 @@ module.exports.init = async (database) => {
     if (!checker) throw new Error("Checker does not exist.");
 
     let lastMinute = -1;
-    checkInterval = setInterval(() => {
+    setInterval(() => {
         const date = new Date();
         if (date.getMinutes() === lastMinute || date.getSeconds() !== checker.check_second) return;
         lastMinute = date.getMinutes();
