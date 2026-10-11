@@ -1,13 +1,13 @@
-const { createPool } = require("mysql2/promise");
+import { createPool } from "mysql2/promise";
 
 require("dotenv").config({ path: [".env.local", ".env"], quiet: true });
 
 (async () => {
     const database = createPool({
-        host: process.env.DATABASE_HOST,
-        user: process.env.DATABASE_USER,
-        password: process.env.DATABASE_PASSWORD,
-        database: process.env.DATABASE_NAME,
+        host: process.env.DATABASE_HOST!,
+        user: process.env.DATABASE_USER!,
+        password: process.env.DATABASE_PASSWORD!,
+        database: process.env.DATABASE_NAME!,
         charset: "utf8mb4_general_ci"
     });
 

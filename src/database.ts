@@ -1,16 +1,13 @@
-const { Database } = require("sqlite3");
-const sqlite = require("sqlite");
+import { Pool } from "mysql2/promise";
+import { Database } from "sqlite3";
+import * as sqlite from "sqlite";
 
-/** @type {import("sqlite").Database|null} */
-let tempDatabase = null;
-module.exports.getTempDatabase = () => tempDatabase;
+let tempDatabase: sqlite.Database | null = null;
+export const getTempDatabase = () => tempDatabase;
 
-let saveInterval = null;
+let saveInterval: NodeJS.Timeout | null = null;
 
-/**
- * @param {import("mysql2/promise").Pool} database
- */
-module.exports.init = async (database) => {
+export const init = async (database: Pool) => {
     try {
         tempDatabase = await sqlite.open({ filename: "temp.db", driver: Database });
     } catch (error) {
@@ -26,23 +23,20 @@ module.exports.init = async (database) => {
     saveInterval = setInterval(() => save(database), 5 * 60 * 1000);
 };
 
-module.exports.stop = async () => {
-    clearInterval(saveInterval);
-    await tempDatabase.close();
+export const stop = async () => {
+    clearInterval(saveInterval!);
+    await tempDatabase!.close();
 };
 
 let saving = false;
 
-/**
- * @param {import("mysql2/promise").Pool} database
- */
-const save = async (database) => {
+const save = async (database: Pool) => {
     if (saving) return;
     saving = true;
 
     let services;
     try {
-        services = await tempDatabase.all("SELECT DISTINCT service_id FROM services_smokeping");
+        services = await tempDatabase!.all("SELECT DISTINCT service_id FROM services_smokeping");
     } catch (error) {
         console.log(`SQL Error - ${__filename} - ${error}`);
         saving = false;
@@ -53,7 +47,7 @@ const save = async (database) => {
         while (true) {
             let pings;
             try {
-                pings = await tempDatabase.all(
+                pings = await tempDatabase!.all(
                     "SELECT * FROM services_smokeping WHERE service_id=? ORDER BY start_time LIMIT 100",
                     [serviceId]
                 );
@@ -88,7 +82,7 @@ const save = async (database) => {
             }
 
             try {
-                await tempDatabase.run("DELETE FROM services_smokeping WHERE service_id=? AND start_time<=?", [
+                await tempDatabase!.run("DELETE FROM services_smokeping WHERE service_id=? AND start_time<=?", [
                     serviceId,
                     pings[pings.length - 1].start_time
                 ]);
